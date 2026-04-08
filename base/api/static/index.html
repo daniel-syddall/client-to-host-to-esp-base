@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Dashboard</title>
+    <style>
+        :root {
+            --bg:       #0f1117;
+            --surface:  #1a1d27;
+            --border:   #2a2d3a;
+            --text:     #e0e0e0;
+            --dim:      #888;
+            --accent:   #5b9cf6;
+            --green:    #4caf50;
+            --yellow:   #ffc107;
+            --red:      #f44336;
+            --orange:   #ff9800;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 { font-size: 1.4rem; font-weight: 600; }
+        .header .status { font-size: 0.85rem; color: var(--dim); }
+        .header .status .dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .dot-online  { background: var(--green); }
+        .dot-stale   { background: var(--yellow); }
+        .dot-offline { background: var(--red); }
+        .dot-unknown   { background: var(--dim); }
+        .dot-rebooting { background: var(--orange); animation: blink 1s ease-in-out infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* Stat Cards */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .stat-card .label { font-size: 0.75rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; color: var(--accent); }
+
+        /* Client cards */
+        .client-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .client-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .client-card .pid { font-weight: 600; font-size: 1rem; }
+        .client-card .state { font-size: 0.8rem; margin-top: 4px; }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--dim);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            border-bottom: 1px solid var(--border);
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(91, 156, 246, 0.05); }
+
+        /* Footer */
+        .footer {
+            margin-top: 32px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--dim);
+        }
+
+        /* Empty state */
+        .empty { padding: 40px; text-align: center; color: var(--dim); }
+
+        /* Client card actions */
+        .client-card .card-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+        .btn {
+            padding: 5px 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-danger { background: var(--red); color: #fff; }
+        .btn-danger:hover { opacity: 0.85; }
+        .autoboot-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--dim);
+            cursor: pointer;
+            margin-left: auto;
+        }
+        .autoboot-label input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
+
+        /* Manage clients table */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .section-header h3 { font-size: 0.9rem; color: var(--dim); }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { opacity: 0.85; }
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 4px 10px;
+            font-size: 0.78rem;
+        }
+        .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-ghost-danger:hover { border-color: var(--red); color: var(--red); }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 24px;
+            width: 420px;
+            max-width: 95vw;
+        }
+        .modal h2 { font-size: 1rem; margin-bottom: 16px; }
+        .modal .divider {
+            font-size: 0.72rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 14px 0 8px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 4px;
+        }
+        .form-row { margin-bottom: 10px; }
+        .form-row label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--dim);
+            margin-bottom: 4px;
+        }
+        .form-row input {
+            width: 100%;
+            padding: 7px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+        .form-row input:focus { outline: none; border-color: var(--accent); }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 18px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Project Dashboard</h1>
+    <div class="status">
+        <span class="dot dot-unknown" id="conn-dot"></span>
+        <span id="conn-text">Connecting...</span>
+        &nbsp;|&nbsp; Uptime: <span id="uptime">—</span>s
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="stats">
+    <div class="stat-card">
+        <div class="label">Clients Online</div>
+        <div class="value" id="stat-clients">—</div>
+    </div>
+    <div class="stat-card">
+        <div class="label">DB Size</div>
+        <div class="value" id="stat-db">— MB</div>
+    </div>
+    <!-- PROJECT-SPECIFIC: Add more stat cards here, e.g.:
+    <div class="stat-card">
+        <div class="label">Sensor Readings</div>
+        <div class="value" id="stat-readings">—</div>
+    </div>
+    -->
+</div>
+
+<!-- Client Status -->
+<h3 style="margin-bottom: 12px; font-size: 0.9rem; color: var(--dim);">CLIENTS</h3>
+<div class="client-grid" id="client-grid"></div>
+
+<!-- PROJECT-SPECIFIC: Add data tables, tabs, or other UI below. Example:
+<h3 style="margin-bottom: 12px; font-size: 0.9rem; color: var(--dim);">DATA</h3>
+<table>
+    <thead><tr><th>ID</th><th>Value</th><th>Timestamp</th></tr></thead>
+    <tbody id="table-data"></tbody>
+</table>
+-->
+
+<!-- Client Management -->
+<div class="section-header" style="margin-top: 32px;">
+    <h3>MANAGE CLIENTS</h3>
+    <button class="btn btn-primary" onclick="openModal()">+ Add Client</button>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th><th>IP</th><th>User</th><th>Container</th><th></th>
+        </tr>
+    </thead>
+    <tbody id="manage-body">
+        <tr><td colspan="6" class="empty">Loading...</td></tr>
+    </tbody>
+</table>
+
+<!-- Add / Edit Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOnBackdrop(event)">
+    <div class="modal">
+        <h2 id="modal-title">Add Client</h2>
+        <input type="hidden" id="edit-original-pid">
+
+        <div class="form-row">
+            <label>Client ID <span id="f-pid-note" style="color:var(--dim);font-size:0.7rem"></span></label>
+            <input id="f-pid" placeholder="pi-01">
+        </div>
+        <div class="divider">SSH</div>
+        <div class="form-row">
+            <label>IP Address</label>
+            <input id="f-ip" placeholder="10.70.0.11">
+        </div>
+        <div class="form-row">
+            <label>Username</label>
+            <input id="f-user" placeholder="pi">
+        </div>
+        <div class="form-row">
+            <label>Password</label>
+            <input id="f-pass" type="password" placeholder="••••••••">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitClient()">Save</button>
+        </div>
+    </div>
+</div>
+
+<div class="footer">Project Baseplate Dashboard</div>
+
+<script>
+    const API = '';
+    const REFRESH_MS = 3000;
+
+    const _deletedClients  = new Set();
+    const _rebootingClients = new Set();
+
+    // Fetch helper
+    async function api(path) {
+        const r = await fetch(API + path);
+        if (!r.ok) throw new Error(r.statusText);
+        return r.json();
+    }
+
+    // Format timestamp
+    function fmtTime(ts) {
+        if (!ts) return '—';
+        try {
+            const d = new Date(ts);
+            return d.toLocaleTimeString();
+        } catch { return ts; }
+    }
+
+    // State dot class
+    function dotClass(state) {
+        if (state === 'online')    return 'dot-online';
+        if (state === 'stale')     return 'dot-stale';
+        if (state === 'offline')   return 'dot-offline';
+        if (state === 'rebooting') return 'dot-rebooting';
+        return 'dot-unknown';
+    }
+
+    // Update stats
+    async function refreshStats() {
+        try {
+            const s = await api('/api/project/stats');
+            document.getElementById('stat-clients').textContent = `${s.clients_online ?? 0} / ${s.clients_expected ?? 0}`;
+            document.getElementById('stat-db').textContent = `${s.db_size_mb ?? 0} MB`;
+
+            // PROJECT-SPECIFIC: Update your stat cards here, e.g.:
+            // document.getElementById('stat-readings').textContent = s.sensor_readings ?? '—';
+
+            // Client cards
+            const grid = document.getElementById('client-grid');
+            const clients = s.clients || {};
+            const visibleClients = Object.entries(clients).filter(([pid]) => !_deletedClients.has(pid));
+            if (visibleClients.length === 0) {
+                grid.innerHTML = '<div class="empty">No clients configured</div>';
+            } else {
+                grid.innerHTML = visibleClients.map(([pid, state]) => {
+                    // Clear rebooting state once the client is confirmed back online
+                    if (_rebootingClients.has(pid) && state === 'online') {
+                        _rebootingClients.delete(pid);
+                    }
+                    const displayState = _rebootingClients.has(pid) ? 'rebooting' : state;
+                    const isRebooting  = displayState === 'rebooting';
+                    const ab = _autoboot[pid];
+                    const checked = ab === true ? 'checked' : '';
+                    return `
+                    <div class="client-card">
+                        <div class="pid"><span class="dot ${dotClass(displayState)}"></span> ${pid}</div>
+                        <div class="state">${displayState.toUpperCase()}</div>
+                        <div class="card-actions">
+                            <button class="btn btn-danger" onclick="rebootClient('${pid}')"
+                                ${isRebooting ? 'disabled' : ''}>Reboot</button>
+                            <label class="autoboot-label">
+                                <input type="checkbox" id="autoboot-${pid}" ${checked}
+                                    onchange="setAutoboot('${pid}', this.checked)">
+                                Auto-boot
+                            </label>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        } catch(e) {
+            console.warn('Stats fetch failed:', e);
+        }
+    }
+
+    // Update system status
+    async function refreshStatus() {
+        try {
+            const s = await api('/api/status');
+            document.getElementById('uptime').textContent = s.uptime ?? '—';
+            document.getElementById('conn-dot').className = 'dot dot-online';
+            document.getElementById('conn-text').textContent = 'Connected';
+        } catch {
+            document.getElementById('conn-dot').className = 'dot dot-offline';
+            document.getElementById('conn-text').textContent = 'Disconnected';
+        }
+    }
+
+    // ── Autoboot state cache ──────────────────────────────────────────────── //
+    const _autoboot = {};
+    let _lastAutobootFetch = 0;
+
+    async function fetchAutobootStates(pids) {
+        await Promise.all(pids.map(async pid => {
+            try {
+                const d = await api(`/api/remote/autoboot/${pid}`);
+                _autoboot[pid] = d.autoboot;
+            } catch {
+                if (!(pid in _autoboot)) _autoboot[pid] = false;
+            }
+        }));
+    }
+
+    async function rebootClient(pid) {
+        if (!confirm(`Reboot ${pid}?`)) return;
+        try {
+            const r = await fetch(`/api/remote/reboot/${pid}`, { method: 'POST' });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert(`Reboot failed: ${err.detail ?? r.statusText}`);
+                return;
+            }
+            const data = await r.json();
+            if (data.success) {
+                _rebootingClients.add(pid);
+                refreshStats();
+            } else {
+                alert(`Reboot command sent but SSH reported failure for ${pid}. Check SSH credentials.`);
+            }
+        } catch(e) {
+            alert(`Reboot request failed: ${e.message}`);
+        }
+    }
+
+    async function setAutoboot(pid, enabled) {
+        _autoboot[pid] = enabled;
+        try {
+            const r = await fetch(`/api/remote/autoboot/${pid}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled }),
+            });
+            if (!r.ok) throw new Error(r.statusText);
+        } catch(e) {
+            _autoboot[pid] = !enabled; // revert on failure
+            const cb = document.getElementById(`autoboot-${pid}`);
+            if (cb) cb.checked = !enabled;
+            console.warn('Autoboot set failed:', e);
+        }
+    }
+
+    // PROJECT-SPECIFIC: Add your data fetch functions here, e.g.:
+    // async function refreshData() {
+    //     try {
+    //         const data = await api('/api/project/readings');
+    //         document.getElementById('table-data').innerHTML = data.length
+    //             ? data.map(d => `<tr><td>${d.id}</td><td>${d.value}</td><td>${fmtTime(d.timestamp)}</td></tr>`).join('')
+    //             : '<tr><td colspan="3" class="empty">No data yet</td></tr>';
+    //     } catch(e) {
+    //         console.warn('Data fetch failed:', e);
+    //     }
+    // }
+
+    // Refresh loop
+    async function refresh() {
+        await Promise.all([refreshStats(), refreshStatus()]);
+        // Sync autoboot state on first load and every 60s (after DOM is built)
+        const now = Date.now();
+        if (now - _lastAutobootFetch > 60000) {
+            _lastAutobootFetch = now;
+            const pids = Array.from(document.querySelectorAll('[id^="autoboot-"]'))
+                .map(el => el.id.replace('autoboot-', ''));
+            if (pids.length) fetchAutobootStates(pids); // fire-and-forget
+        }
+        // PROJECT-SPECIFIC: Add your refresh functions here, e.g.:
+        // await refreshData();
+    }
+    refresh();
+    setInterval(refresh, REFRESH_MS);
+
+    // ── Client Management ─────────────────────────────────────────────────── //
+
+    let _manageClientData = {};
+
+    async function loadManageTable() {
+        try {
+            const clients = await api('/api/config/clients');
+            const visible = clients.filter(c => !_deletedClients.has(c.pid));
+            const tbody = document.getElementById('manage-body');
+
+            // Cache client data for the event handler to look up by pid
+            _manageClientData = {};
+            visible.forEach(c => { _manageClientData[c.pid] = c; });
+
+            if (!visible.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty">No clients configured</td></tr>';
+                return;
+            }
+            tbody.innerHTML = visible.map(c => `
+                <tr data-pid="${c.pid}">
+                    <td>${c.pid}</td>
+                    <td>${c.ssh.ip}</td>
+                    <td>${c.ssh.user}</td>
+                    <td style="color:var(--dim)">${c.container_name || '—'}</td>
+                    <td style="text-align:right;white-space:nowrap">
+                        <button class="btn btn-ghost" data-action="edit">Edit</button>
+                        <button class="btn btn-ghost btn-ghost-danger" style="margin-left:4px"
+                            data-action="delete">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            tbody.querySelectorAll('tr[data-pid]').forEach(row => {
+                const pid = row.dataset.pid;
+                row.querySelector('[data-action="edit"]').addEventListener('click', () => {
+                    openModal(_manageClientData[pid]);
+                });
+                row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+                    deleteClient(pid);
+                });
+            });
+        } catch(e) {
+            console.warn('Manage table load failed:', e);
+        }
+    }
+
+    function openModal(client) {
+        const isEdit = !!client;
+        document.getElementById('modal-title').textContent = isEdit ? 'Edit Client' : 'Add Client';
+        document.getElementById('edit-original-pid').value = isEdit ? client.pid : '';
+        document.getElementById('f-pid').value       = isEdit ? client.pid : '';
+        document.getElementById('f-pid').readOnly    = isEdit;
+        document.getElementById('f-pid').style.opacity = isEdit ? '0.5' : '1';
+        document.getElementById('f-pid-note').textContent = isEdit ? '— set by client.toml on the client machine' : '';
+        document.getElementById('f-ip').value        = client ? client.ssh.ip : '';
+        document.getElementById('f-user').value      = client ? client.ssh.user : '';
+        document.getElementById('f-pass').value      = client ? client.ssh.password : '';
+        document.getElementById('modal-overlay').classList.add('open');
+    }
+
+    function closeModal() {
+        document.getElementById('modal-overlay').classList.remove('open');
+    }
+
+    function closeModalOnBackdrop(e) {
+        if (e.target === document.getElementById('modal-overlay')) closeModal();
+    }
+
+    async function submitClient() {
+        const originalPid = document.getElementById('edit-original-pid').value;
+        const body = {
+            pid: document.getElementById('f-pid').value.trim(),
+            ssh: {
+                ip:       document.getElementById('f-ip').value.trim(),
+                user:     document.getElementById('f-user').value.trim(),
+                password: document.getElementById('f-pass').value,
+            },
+        };
+        if (!body.pid || !body.ssh.ip || !body.ssh.user) {
+            alert('Client ID, IP, and Username are required.');
+            return;
+        }
+        const isEdit = !!originalPid;
+        const url  = isEdit ? `/api/config/clients/${originalPid}` : '/api/config/clients';
+        const method = isEdit ? 'PUT' : 'POST';
+        try {
+            const r = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert(`Error: ${err.detail ?? r.statusText}`);
+                return;
+            }
+            closeModal();
+            await loadManageTable();
+            await refreshStats();
+        } catch(e) {
+            alert(`Request failed: ${e.message}`);
+        }
+    }
+
+    async function deleteClient(pid) {
+        if (!confirm(`Remove client '${pid}'? This cannot be undone.`)) return;
+        try {
+            const r = await fetch(`/api/config/clients/${pid}`, { method: 'DELETE' });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert(`Error: ${err.detail ?? r.statusText}`);
+                return;
+            }
+            _deletedClients.add(pid);
+            await loadManageTable();
+            await refreshStats();
+        } catch(e) {
+            alert(`Request failed: ${e.message}`);
+        }
+    }
+
+    loadManageTable();
+</script>
+
+</body>
+</html>

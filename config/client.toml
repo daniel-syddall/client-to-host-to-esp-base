@@ -1,0 +1,58 @@
+# ======================== Client Identity ======================== #
+
+pid = "11"
+
+# ======================== MQTT ======================== #
+
+[mqtt]
+host        = "10.70.0.2"   # Host machine MQTT broker
+port        = 1883
+keepalive   = 60
+reconnect_interval = 5.0
+topic_prefix = "project"
+
+# ======================== Database ======================== #
+
+[database]
+enabled  = false
+filename = "client.db"
+path     = "./data"
+
+# ======================== Service ======================== #
+
+[service]
+enabled = false
+name    = "project-client"
+
+# ======================== ESP Board Management ======================== #
+
+[esp]
+# How often (seconds) the Pi polls each board for a status report.
+heartbeat_interval = 5.0
+
+# Path to the esp/ firmware workspace (relative to the project root).
+# This is where build.sh puts the flat binaries for flash.sh to read.
+esp_dir = "./esp"
+
+# List connected boards.  If empty, the runtime auto-discovers all
+# /dev/esp_port_* symlinks created by the udev setup script.
+#
+# [[esp.ports]]
+# symlink   = "/dev/esp_port_0"
+# baud_rate = 921600
+#
+# [[esp.ports]]
+# symlink   = "/dev/esp_port_1"
+# baud_rate = 921600
+
+# ======================== Project-Specific ======================== #
+
+# PROJECT-SPECIFIC: Add your custom client settings below, e.g.:
+#
+# [sensors]
+# poll_interval = 5.0
+# interfaces    = ["gpio4", "i2c1"]
+#
+# [capture]
+# buffer_size = 10000
+# send_interval = 10.0

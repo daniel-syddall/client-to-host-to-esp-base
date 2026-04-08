@@ -1,0 +1,40 @@
+project_name = "client-to-host-base"
+
+[mqtt]
+host = "mosquitto"
+port = 1883
+keepalive = 60
+reconnect_interval = 5.0
+topic_prefix = "project"
+
+[database]
+enabled = true
+filename = "host.db"
+path = "./data"
+
+[api]
+enabled = true
+host = "0.0.0.0"
+port = 8080
+
+[service]
+enabled = false
+name = "project-host"
+
+[[clients]]
+pid = "11"
+mqtt_topic = "project/client/11"
+container_name = "client-to-host-base-11"
+
+[clients.ssh]
+ip = "10.70.0.11"
+user = "revector"
+password = "R3v3ct0r"
+
+[storage]
+max_records = 999
+checkpoint_interval = 30.0
+
+[sync]
+clock_sync_interval = 60.0
+pi_check_interval = 10.0

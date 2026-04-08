@@ -1,0 +1,30 @@
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  host:
+    build: .
+    command: ["--mode", "host"]
+    depends_on:
+      - mosquitto
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./config/host.toml:/app/config/host.toml
+    restart: unless-stopped
+
+  client:
+    build: .
+    command: ["--mode", "client"]
+    depends_on:
+      - mosquitto
+    volumes:
+      - ./config/client.toml:/app/config/client.toml:ro
+    restart: unless-stopped

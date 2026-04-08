@@ -1,0 +1,30 @@
+# ESP-IDF SDK defaults for this project.
+# These are applied on top of the chip defaults when running `idf.py set-target`.
+# Override any value here to avoid modifying the generated sdkconfig.
+
+# ── UART ──────────────────────────────────────────────────────────────────── #
+
+# Use UART0 for the console (monitor) so UART1 remains free for Pi comms.
+CONFIG_ESP_CONSOLE_UART_NUM=0
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# ── FreeRTOS ──────────────────────────────────────────────────────────────── #
+
+# 1 kHz tick rate (1 ms resolution).
+CONFIG_FREERTOS_HZ=1000
+
+# ── Logging ───────────────────────────────────────────────────────────────── #
+
+# Default log level: INFO in production, DEBUG during development.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+# CONFIG_LOG_DEFAULT_LEVEL_DEBUG=y
+
+# ── Flash size ────────────────────────────────────────────────────────────── #
+
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# ── Watchdog ──────────────────────────────────────────────────────────────── #
+
+# Disable the task watchdog on the idle task so long-running serial reads
+# don't trigger a reset during development.
+CONFIG_ESP_TASK_WDT_EN=n

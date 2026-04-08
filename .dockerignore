@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+data/
+.claude/
+.git/
+
+# ESP firmware build artefacts — compiled outside the container by build.sh.
+esp/build/
+esp/main/main.c
+esp/sdkconfig
+esp/dependencies.lock
+esp/managed_components/

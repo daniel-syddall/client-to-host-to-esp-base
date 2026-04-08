@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude
+.claude/
+
+# ESP firmware
+esp/build/
+esp/sdkconfig
+esp/dependencies.lock
+esp/managed_components/
+# The staged main.c is derived from the project .c file — don't track it.
+esp/main/main.c
+# Keep the flat binaries out of git — they're large and reproducible.
+esp/*.bin

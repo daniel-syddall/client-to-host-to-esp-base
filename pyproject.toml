@@ -1,0 +1,26 @@
+[project]
+name = "project-baseplate"
+version = "0.1.0"
+description = "Reusable client-host system baseplate"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.0",
+    "paho-mqtt>=2.0",
+    "aiosqlite>=0.20",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "paramiko>=3.0",
+    "tomli>=2.0;python_version<'3.11'",
+    "tomli-w>=1.0",
+    "pyserial-asyncio>=0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+# PROJECT-SPECIFIC: Rename the script entry point to match your project.
+[project.scripts]
+project = "run:main"
