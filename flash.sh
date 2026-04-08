@@ -227,15 +227,17 @@ fi
 # ── Resolve esptool command ── #
 # Try esptool.py, then python3 -m esptool, then install and retry.
 ESPTOOL=""
-if command -v esptool.py &>/dev/null; then
+if command -v esptool &>/dev/null; then
+    ESPTOOL="esptool"
+elif command -v esptool.py &>/dev/null; then
     ESPTOOL="esptool.py"
 elif python3 -m esptool version &>/dev/null 2>&1; then
     ESPTOOL="python3 -m esptool"
 else
     echo "[flash] esptool not found — installing via pip..."
     pip3 install esptool --break-system-packages 2>/dev/null || pip3 install esptool
-    if command -v esptool.py &>/dev/null; then
-        ESPTOOL="esptool.py"
+    if command -v esptool &>/dev/null; then
+        ESPTOOL="esptool"
     elif python3 -m esptool version &>/dev/null 2>&1; then
         ESPTOOL="python3 -m esptool"
     else
