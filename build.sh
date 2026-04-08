@@ -110,7 +110,7 @@ if [ "${SKIP_ESP:-0}" != "1" ]; then
             -v "$ESP_DIR":/project \
             -w /project \
             "$IDF_IMAGE" \
-            bash -c "idf.py set-target esp32 && idf.py build"
+            bash -c "idf.py set-target esp32s3 && idf.py build"
 
         # Copy the flat binaries up to esp/ so flash.sh can find them.
         BUILD_DIR="$ESP_DIR/build"

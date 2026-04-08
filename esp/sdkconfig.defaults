@@ -23,6 +23,12 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
+# ── ESP32-S3 specific ─────────────────────────────────────────────────────── #
+
+# Use USB-Serial/JTAG controller for console on ESP32-S3 DevKit boards,
+# or keep UART0 if using a separate USB-UART adapter.
+# CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
 # ── Watchdog ──────────────────────────────────────────────────────────────── #
 
 # Disable the task watchdog on the idle task so long-running serial reads
