@@ -30,9 +30,9 @@
 
 /* ── Configuration ────────────────────────────────────────────────────────── */
 
-#define UART_PORT       UART_NUM_1      /* UART used for Pi comms              */
-#define UART_TX_PIN     17              /* GPIO pin for TX → Pi RX             */
-#define UART_RX_PIN     16              /* GPIO pin for RX ← Pi TX             */
+#define UART_PORT       UART_NUM_0      /* UART0 = CH340 USB-UART bridge → Pi  */
+#define UART_TX_PIN     UART_PIN_NO_CHANGE   /* Keep default UART0 pins        */
+#define UART_RX_PIN     UART_PIN_NO_CHANGE
 #define UART_BAUD       921600          /* Must match ESPPortConfig.baud_rate  */
 #define UART_BUF_SIZE   4096
 
@@ -147,10 +147,11 @@ static void run_handshake(void) {
         if (read_json_line(line, sizeof(line)) < 0) continue;
         ESP_LOGD(TAG, "RX: %s", line);
 
-        /* Minimal parse — look for "init" and extract board_id. */
+        /* Minimal parse — look for "init" and extract id.
+         * Pi sends: {"type":"init","id":<n>}               */
         if (strstr(line, "\"init\"") == NULL) continue;
 
-        char *p = strstr(line, "\"board_id\"");
+        char *p = strstr(line, "\"id\"");
         if (!p) continue;
         p = strchr(p, ':');
         if (!p) continue;
@@ -161,9 +162,9 @@ static void run_handshake(void) {
     g_board_id = board_id;
     ESP_LOGI(TAG, "INIT received — board_id=%d", g_board_id);
 
-    /* Step 2 — reply ACK */
+    /* Step 2 — reply ACK — field name "id" matches what Pi expects */
     char ack[JSON_BUF_SIZE];
-    snprintf(ack, sizeof(ack), "{\"type\":\"ack\",\"board_id\":%d}", g_board_id);
+    snprintf(ack, sizeof(ack), "{\"type\":\"ack\",\"id\":%d}", g_board_id);
     send_json(ack);
     ESP_LOGI(TAG, "ACK sent");
 
@@ -198,7 +199,7 @@ static void handle_command(const char *line) {
         /* Pi is polling for a status report. */
         char resp[JSON_BUF_SIZE];
         snprintf(resp, sizeof(resp),
-                 "{\"type\":\"status\",\"board_id\":%d,\"running\":true}",
+                 "{\"type\":\"status\",\"id\":%d,\"running\":true}",
                  g_board_id);
         send_json(resp);
 

@@ -2,11 +2,16 @@
 # These are applied on top of the chip defaults when running `idf.py set-target`.
 # Override any value here to avoid modifying the generated sdkconfig.
 
-# ── UART ──────────────────────────────────────────────────────────────────── #
-
-# Use UART0 for the console (monitor) so UART1 remains free for Pi comms.
-CONFIG_ESP_CONSOLE_UART_NUM=0
-CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+# ── Console ───────────────────────────────────────────────────────────────── #
+#
+# UART0 is used for Pi communication (via the CH340 USB-UART bridge).
+# Redirect the ESP-IDF console to the ESP32-S3 native USB (USB Serial/JTAG)
+# so that log output does not corrupt the binary/JSON protocol stream.
+#
+# To view logs: connect the second USB port (native USB) to a host and run:
+#   idf.py monitor -p /dev/ttyACM0   (or the assigned CDC port)
+#
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 # ── FreeRTOS ──────────────────────────────────────────────────────────────── #
 

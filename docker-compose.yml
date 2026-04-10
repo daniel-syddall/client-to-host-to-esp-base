@@ -27,4 +27,6 @@ services:
       - mosquitto
     volumes:
       - ./config/client.toml:/app/config/client.toml:ro
+      - /dev:/dev  # expose host /dev so ESP serial ports and udev symlinks are visible
+    privileged: true  # required for USB serial device access
     restart: unless-stopped

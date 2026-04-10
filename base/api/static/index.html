@@ -150,6 +150,36 @@
         }
         .autoboot-label input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
 
+        /* ESP board section inside client card */
+        .esp-boards {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+        .esp-boards-header {
+            font-size: 0.7rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .esp-board-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 3px 0;
+            font-size: 0.8rem;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+        }
+        .esp-board-id   { color: var(--text); min-width: 54px; }
+        .esp-board-port { color: var(--dim); flex: 1; }
+        .esp-board-state { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; }
+        .dot-running      { background: var(--green); }
+        .dot-ready        { background: var(--accent); }
+        .dot-waiting      { background: var(--yellow); }
+        .dot-stale        { background: var(--orange); }
+        .dot-disconnected { background: var(--red); }
+
         /* Manage clients table */
         .section-header {
             display: flex;
@@ -246,6 +276,10 @@
         <div class="label">DB Size</div>
         <div class="value" id="stat-db">— MB</div>
     </div>
+    <div class="stat-card">
+        <div class="label">ESP Boards</div>
+        <div class="value" id="stat-esp">—</div>
+    </div>
     <!-- PROJECT-SPECIFIC: Add more stat cards here, e.g.:
     <div class="stat-card">
         <div class="label">Sensor Readings</div>
@@ -338,7 +372,7 @@
         } catch { return ts; }
     }
 
-    // State dot class
+    // State dot class — client peer states
     function dotClass(state) {
         if (state === 'online')    return 'dot-online';
         if (state === 'stale')     return 'dot-stale';
@@ -346,6 +380,19 @@
         if (state === 'rebooting') return 'dot-rebooting';
         return 'dot-unknown';
     }
+
+    // State dot class — ESP board states
+    function espDotClass(state) {
+        if (state === 'running')      return 'dot-running';
+        if (state === 'ready')        return 'dot-ready';
+        if (state === 'waiting')      return 'dot-waiting';
+        if (state === 'stale')        return 'dot-stale';
+        if (state === 'disconnected') return 'dot-disconnected';
+        return 'dot-unknown';
+    }
+
+    // ESP board status cache — keyed by client pid
+    let _espStatus = {};
 
     // Update stats
     async function refreshStats() {
@@ -373,10 +420,24 @@
                     const isRebooting  = displayState === 'rebooting';
                     const ab = _autoboot[pid];
                     const checked = ab === true ? 'checked' : '';
+                    const esp = _espStatus[pid] || {};
+                    const boards = esp.esp_boards || [];
+                    const espHtml = boards.length > 0 ? `
+                        <div class="esp-boards">
+                            <div class="esp-boards-header">ESP Boards &nbsp;${esp.esp_running ?? 0} / ${esp.esp_total ?? 0} running</div>
+                            ${boards.map(b => `
+                                <div class="esp-board-row">
+                                    <span class="dot ${espDotClass(b.state)}"></span>
+                                    <span class="esp-board-id">Board ${b.board_id}</span>
+                                    <span class="esp-board-port">${b.port}</span>
+                                    <span class="esp-board-state" style="color:var(--${b.state === 'running' ? 'green' : b.state === 'disconnected' ? 'red' : b.state === 'waiting' ? 'yellow' : 'dim'})">${b.state}</span>
+                                </div>`).join('')}
+                        </div>` : '';
                     return `
                     <div class="client-card">
                         <div class="pid"><span class="dot ${dotClass(displayState)}"></span> ${pid}</div>
                         <div class="state">${displayState.toUpperCase()}</div>
+                        ${espHtml}
                         <div class="card-actions">
                             <button class="btn btn-danger" onclick="rebootClient('${pid}')"
                                 ${isRebooting ? 'disabled' : ''}>Reboot</button>
@@ -460,21 +521,25 @@
         }
     }
 
+    // Fetch ESP board status for all clients and update the stat card.
+    async function refreshESP() {
+        try {
+            const data = await api('/api/project/esp/status');
+            _espStatus = data;
+            const totalRunning = Object.values(data).reduce((s, c) => s + (c.esp_running || 0), 0);
+            const totalBoards  = Object.values(data).reduce((s, c) => s + (c.esp_total  || 0), 0);
+            document.getElementById('stat-esp').textContent = `${totalRunning} / ${totalBoards}`;
+        } catch(e) {
+            console.warn('ESP status fetch failed:', e);
+        }
+    }
+
     // PROJECT-SPECIFIC: Add your data fetch functions here, e.g.:
-    // async function refreshData() {
-    //     try {
-    //         const data = await api('/api/project/readings');
-    //         document.getElementById('table-data').innerHTML = data.length
-    //             ? data.map(d => `<tr><td>${d.id}</td><td>${d.value}</td><td>${fmtTime(d.timestamp)}</td></tr>`).join('')
-    //             : '<tr><td colspan="3" class="empty">No data yet</td></tr>';
-    //     } catch(e) {
-    //         console.warn('Data fetch failed:', e);
-    //     }
-    // }
+    // async function refreshData() { ... }
 
     // Refresh loop
     async function refresh() {
-        await Promise.all([refreshStats(), refreshStatus()]);
+        await Promise.all([refreshESP(), refreshStats(), refreshStatus()]);
         // Sync autoboot state on first load and every 60s (after DOM is built)
         const now = Date.now();
         if (now - _lastAutobootFetch > 60000) {

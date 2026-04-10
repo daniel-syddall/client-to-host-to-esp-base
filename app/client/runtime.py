@@ -138,14 +138,22 @@ class ClientRuntime:
                     await board.write(build_command("status"))
 
             # Publish ESP board summary to host.
-            summary = self._esp_registry.summary()
-            if summary:
+            if self._esp_registry.total_count > 0:
+                boards_list = [
+                    {
+                        "board_id": b.board_id,
+                        "port":     b.port,
+                        "state":    b.state.value,
+                        "last_seen": b.last_seen,
+                    }
+                    for b in self._esp_registry.boards.values()
+                ]
                 envelope = build_envelope(
                     sender=self.pid,
                     msg_type=ProjectMessageType.ESP_STATUS,
                     payload={
                         "pid":     self.pid,
-                        "boards":  summary,
+                        "boards":  boards_list,
                         "running": self._esp_registry.running_count,
                         "total":   self._esp_registry.total_count,
                     },
