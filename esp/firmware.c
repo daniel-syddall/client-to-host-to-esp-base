@@ -30,9 +30,16 @@
 
 /* ── Configuration ────────────────────────────────────────────────────────── */
 
-#define UART_PORT       UART_NUM_0      /* UART0 = CH340 USB-UART bridge → Pi  */
-#define UART_TX_PIN     UART_PIN_NO_CHANGE   /* Keep default UART0 pins        */
-#define UART_RX_PIN     UART_PIN_NO_CHANGE
+#define UART_PORT       UART_NUM_1      /* UART1, routed to GPIO43/44 via GPIO matrix    */
+#define UART_TX_PIN     43              /* GPIO43 = physical CH340 RX line (board TX)    */
+#define UART_RX_PIN     44              /* GPIO44 = physical CH340 TX line (board RX)    */
+/* Why UART1 and not UART0?
+ * The ESP-IDF console subsystem installs its own driver on UART0 before
+ * app_main() runs.  Calling uart_driver_install(UART_NUM_0) then panics
+ * with ESP_ERR_INVALID_STATE.  UART1 is unused by IDF, so the install
+ * succeeds cleanly.  gpio_func_sel() in uart_set_pin() switches GPIO43/44
+ * from the UART0 IOMUX path to the GPIO-matrix path for UART1, giving
+ * UART1 exclusive ownership of the physical lines. */
 #define UART_BAUD       921600          /* Must match ESPPortConfig.baud_rate  */
 #define UART_BUF_SIZE   4096
 
@@ -305,10 +312,6 @@ static void data_task(void *arg) {
 /* ── UART init ────────────────────────────────────────────────────────────── */
 
 static void uart_init(void) {
-    /* Remove any driver the IDF console subsystem may have installed on UART0
-     * before app_main() ran.  Safe to call even if no driver is installed. */
-    uart_driver_delete(UART_PORT);
-
     uart_config_t cfg = {
         .baud_rate  = UART_BAUD,
         .data_bits  = UART_DATA_8_BITS,

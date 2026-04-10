@@ -195,6 +195,12 @@ class ESPSerial:
 
         Raises TimeoutError if ACK is not received within the timeout.
         """
+        # Opening the serial port asserts DTR which resets the ESP32 via the
+        # CH340's EN line.  Wait for the full boot cycle to complete before
+        # sending INIT, otherwise the message is consumed by the ROM
+        # bootloader and the board never sees it.
+        await asyncio.sleep(3.5)
+
         # Send INIT with our assigned board ID.
         await self.write(build_init(self._board_id))
         logger.info("Board %d: INIT sent (id=%d)", self._board_id, self._board_id)

@@ -4,17 +4,9 @@
 
 # ── Console ───────────────────────────────────────────────────────────────── #
 #
-# UART0 is the Pi↔ESP protocol channel (via CH340 USB-UART bridge).
-# Disable the IDF console entirely so the IDF startup code does NOT install
-# a UART driver on UART0 before app_main() runs.  If it did, our own
-# uart_driver_install(UART_NUM_0) call in uart_init() would panic with
-# ESP_ERR_INVALID_STATE and the board would stall silently.
-#
-# Side-effect: ESP_LOGI / ESP_LOGD output is discarded at runtime.
-# To debug: temporarily set CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y and
-# connect the native USB port to a host running:  idf.py monitor -p /dev/ttyACM0
-#
-CONFIG_ESP_CONSOLE_NONE=y
+# No console override needed.  The protocol uses UART1 on GPIO43/44, which
+# is independent of whichever UART the IDF console occupies (UART0 by default).
+# Bootloader and IDF log output continue to work normally on UART0.
 
 # ── FreeRTOS ──────────────────────────────────────────────────────────────── #
 
