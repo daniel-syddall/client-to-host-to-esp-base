@@ -305,6 +305,10 @@ static void data_task(void *arg) {
 /* ── UART init ────────────────────────────────────────────────────────────── */
 
 static void uart_init(void) {
+    /* Remove any driver the IDF console subsystem may have installed on UART0
+     * before app_main() ran.  Safe to call even if no driver is installed. */
+    uart_driver_delete(UART_PORT);
+
     uart_config_t cfg = {
         .baud_rate  = UART_BAUD,
         .data_bits  = UART_DATA_8_BITS,

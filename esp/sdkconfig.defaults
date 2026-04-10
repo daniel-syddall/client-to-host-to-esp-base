@@ -4,14 +4,17 @@
 
 # ── Console ───────────────────────────────────────────────────────────────── #
 #
-# UART0 is used for Pi communication (via the CH340 USB-UART bridge).
-# Redirect the ESP-IDF console to the ESP32-S3 native USB (USB Serial/JTAG)
-# so that log output does not corrupt the binary/JSON protocol stream.
+# UART0 is the Pi↔ESP protocol channel (via CH340 USB-UART bridge).
+# Disable the IDF console entirely so the IDF startup code does NOT install
+# a UART driver on UART0 before app_main() runs.  If it did, our own
+# uart_driver_install(UART_NUM_0) call in uart_init() would panic with
+# ESP_ERR_INVALID_STATE and the board would stall silently.
 #
-# To view logs: connect the second USB port (native USB) to a host and run:
-#   idf.py monitor -p /dev/ttyACM0   (or the assigned CDC port)
+# Side-effect: ESP_LOGI / ESP_LOGD output is discarded at runtime.
+# To debug: temporarily set CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y and
+# connect the native USB port to a host running:  idf.py monitor -p /dev/ttyACM0
 #
-CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_NONE=y
 
 # ── FreeRTOS ──────────────────────────────────────────────────────────────── #
 
@@ -27,12 +30,6 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 # ── Flash size ────────────────────────────────────────────────────────────── #
 
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
-
-# ── ESP32-S3 specific ─────────────────────────────────────────────────────── #
-
-# Use USB-Serial/JTAG controller for console on ESP32-S3 DevKit boards,
-# or keep UART0 if using a separate USB-UART adapter.
-# CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 # ── Watchdog ──────────────────────────────────────────────────────────────── #
 
