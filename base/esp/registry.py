@@ -89,7 +89,7 @@ class ESPRegistry:
 
     def register(self, board_id: int, port: str) -> None:
         """Register a newly discovered board."""
-        self._boards[board_id] = BoardStatus(board_id=board_id, port=port)
+        self._boards[board_id] = BoardStatus(board_id=board_id, port=port, last_seen=time.time())
         logger.info("ESP board registered: id=%d port=%s", board_id, port)
 
     def remove(self, board_id: int) -> None:

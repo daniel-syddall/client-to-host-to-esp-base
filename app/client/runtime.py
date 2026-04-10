@@ -60,6 +60,7 @@ class ClientRuntime:
             mqtt=self._mqtt,
             topics=self._topics,
             pid=config.pid,
+            registry=self._esp_registry,
         )
 
     # ======================== Properties ======================== #

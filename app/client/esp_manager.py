@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 from base.comms import MQTTClient, TopicManager, build_envelope
+from base.esp import ESPRegistry
 from app.models.config import ProjectClientConfig
 from app.models.messages import ProjectMessageType
 
@@ -36,15 +37,17 @@ class ESPManager:
 
     def __init__(
         self,
-        config: ProjectClientConfig,
-        mqtt:   MQTTClient,
-        topics: TopicManager,
-        pid:    str,
+        config:    ProjectClientConfig,
+        mqtt:      MQTTClient,
+        topics:    TopicManager,
+        pid:       str,
+        registry:  ESPRegistry | None = None,
     ) -> None:
-        self._config = config
-        self._mqtt   = mqtt
-        self._topics = topics
-        self._pid    = pid
+        self._config    = config
+        self._mqtt      = mqtt
+        self._topics    = topics
+        self._pid       = pid
+        self._registry  = registry
 
     # ======================== Control Frame Handler ======================== #
 
@@ -66,6 +69,8 @@ class ESPManager:
                 "ESP board %d status: running=%s",
                 board_id, msg.get("running"),
             )
+            if self._registry:
+                self._registry.heartbeat_received(board_id, msg)
 
         # PROJECT-SPECIFIC: Add your own control message types here, e.g.:
         #
