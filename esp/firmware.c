@@ -50,9 +50,13 @@
 #define JSON_BUF_SIZE   256
 #define DATA_BUF_SIZE   1024
 
-/* LED1 — green status LED, GPIO38, active-high.
+/* LED1 — green status LED on GPIO38.
+ * Circuit: 3.3V → R13 → Anode → LED → Cathode → GPIO38  (active-low).
+ * Pull GPIO38 LOW to turn the LED on; HIGH to turn it off.
  * Blinks at 1 Hz while data_task is running; off during handshake/re-handshake. */
 #define LED_GPIO        38
+#define LED_ON          0               /* active-low: sink cathode to GND  */
+#define LED_OFF         1
 #define LED_BLINK_EVERY 5               /* frames between toggles (5 × 100 ms = 500 ms) */
 
 static const char *TAG = "esp_fw";
@@ -342,7 +346,7 @@ static void data_task(void *arg) {
     while (true) {
         /* Block until the handshake completes and the Pi sends START. */
         if (!g_running) {
-            gpio_set_level(LED_GPIO, 0);    /* LED off while paused */
+            gpio_set_level(LED_GPIO, LED_OFF);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
@@ -357,7 +361,7 @@ static void data_task(void *arg) {
         /* ── PROJECT-SPECIFIC: replace the four lines above ───── */
 
         /* Blink LED1 at 1 Hz while running (toggle every LED_BLINK_EVERY frames). */
-        gpio_set_level(LED_GPIO, (seq / LED_BLINK_EVERY) % 2);
+        gpio_set_level(LED_GPIO, ((seq / LED_BLINK_EVERY) % 2) ? LED_OFF : LED_ON);
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -368,8 +372,8 @@ static void data_task(void *arg) {
 static void led_init(void) {
     gpio_reset_pin(LED_GPIO);
     gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED_GPIO, 0);
-    ESP_LOGI(TAG, "LED1 initialised on GPIO%d", LED_GPIO);
+    gpio_set_level(LED_GPIO, LED_OFF);
+    ESP_LOGI(TAG, "LED1 initialised on GPIO%d (active-low)", LED_GPIO);
 }
 
 /* ── UART init ────────────────────────────────────────────────────────────── */
