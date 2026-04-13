@@ -15,6 +15,7 @@ the binary data format or what processing is applied.
 """
 
 import logging
+import time
 from typing import Any
 
 from base.comms import MQTTClient, TopicManager, build_envelope
@@ -23,6 +24,11 @@ from app.models.config import ProjectClientConfig
 from app.models.messages import ProjectMessageType
 
 logger = logging.getLogger(__name__)
+
+# Sequence gap larger than this (frames) is treated as the board having kept
+# running while the client was stopped, rather than actual dropped frames.
+# 100 frames = 10 seconds at 10 Hz — comfortably covers a normal restart.
+_RECONNECT_GAP = 100
 
 
 class ESPManager:
@@ -48,6 +54,8 @@ class ESPManager:
         self._topics    = topics
         self._pid       = pid
         self._registry  = registry
+        # Per-board data validation state (populated lazily on first frame).
+        self._board_stats: dict[int, dict] = {}
 
     # ======================== Control Frame Handler ======================== #
 
@@ -108,18 +116,79 @@ class ESPManager:
         # Example — Correlation across boards:
         #   await self._correlate(board_id, payload)
 
-        # Baseplate test firmware sends a 4-byte big-endian sequence counter at
-        # 10 Hz.  Log every frame at DEBUG and every 100th frame (~10 s) at INFO
-        # so the pipeline can be verified without flooding the output.
-        if len(payload) >= 4:
-            seq = int.from_bytes(payload[:4], "big")
-            logger.debug("Board %d seq=%d", board_id, seq)
-            if seq % 100 == 0:
-                logger.info("Board %d data flowing: seq=%d", board_id, seq)
-        else:
-            logger.debug("Board %d data frame: %d bytes", board_id, len(payload))
+        now   = time.monotonic()
+        stats = self._board_stats.setdefault(board_id, {
+            "last_seq":      None,
+            "frames":        0,
+            "drops":         0,
+            "session_start": now,
+        })
 
-        # PROJECT-SPECIFIC: Replace the block above with real handling.
+        # ── Payload format check ──────────────────────────────────────────── #
+        # Baseplate test firmware sends exactly 4 bytes (big-endian uint32 seq).
+        # A different size means the wrong firmware is flashed.
+        if len(payload) != 4:
+            logger.warning(
+                "Board %d: unexpected payload size %d B (expected 4 B) "
+                "— check that the correct firmware is flashed",
+                board_id, len(payload),
+            )
+            return
+
+        seq = int.from_bytes(payload[:4], "big")
+        stats["frames"] += 1
+
+        # ── Continuity check ──────────────────────────────────────────────── #
+        last = stats["last_seq"]
+        if last is not None:
+            gap = seq - last - 1
+
+            if gap > _RECONNECT_GAP:
+                # The firmware kept running while the client was stopped.
+                # Reset per-session counters so rate reflects the new session.
+                logger.info(
+                    "Board %d: seq resumed at %d after reconnect "
+                    "(%d frames counted while client was down)",
+                    board_id, seq, gap,
+                )
+                stats["frames"]        = 1
+                stats["drops"]         = 0
+                stats["session_start"] = now
+
+            elif gap > 0:
+                # Small positive gap — genuine frame drops on the link.
+                stats["drops"] += gap
+                logger.warning(
+                    "Board %d: %d frame(s) dropped (seq %d → %d)",
+                    board_id, gap, last, seq,
+                )
+
+            elif gap < 0:
+                # Seq went backwards — firmware rebooted (power cycle or reset).
+                logger.info(
+                    "Board %d: seq reset %d → %d — firmware rebooted",
+                    board_id, last, seq,
+                )
+                stats["frames"]        = 1
+                stats["drops"]         = 0
+                stats["session_start"] = now
+
+        stats["last_seq"] = seq
+        logger.debug("Board %d seq=%d", board_id, seq)
+
+        # ── Periodic health report (every 100 frames ≈ 10 s) ─────────────── #
+        if seq % 100 == 0:
+            elapsed  = now - stats["session_start"]
+            rate     = stats["frames"] / elapsed if elapsed > 0 else 0.0
+            total    = stats["frames"] + stats["drops"]
+            drop_pct = 100.0 * stats["drops"] / total if total > 0 else 0.0
+            logger.info(
+                "Board %d | seq=%-6d  rate=%4.1f Hz  "
+                "frames=%d  drops=%d (%.1f%%)",
+                board_id, seq, rate, stats["frames"], stats["drops"], drop_pct,
+            )
+
+        # PROJECT-SPECIFIC: Replace this block with real payload parsing.
 
     # ======================== Helpers ======================== #
 
