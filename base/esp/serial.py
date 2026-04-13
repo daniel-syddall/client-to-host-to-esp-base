@@ -119,7 +119,24 @@ class ESPSerial:
         """
         self._on_disconnect.append(callback)
 
-    # ======================== Write ======================== #
+    # ======================== Write / Restart ======================== #
+
+    async def restart(self) -> None:
+        """Force a disconnect → reconnect → re-handshake cycle for this board.
+
+        Closes the serial writer, which causes the active _read_frames loop
+        to see EOF and return. The outer read_loop then fires disconnect
+        callbacks, sleeps for reconnect_interval, re-opens the port, and
+        re-runs _run_handshake — sending a fresh INIT to the firmware.
+
+        The firmware handles the re-INIT in handle_command(): it pauses
+        data_task, ACKs, waits for START, then resumes.
+        """
+        if self._writer:
+            try:
+                self._writer.close()
+            except Exception:
+                pass
 
     async def write(self, data: bytes) -> None:
         """Send raw bytes to the board. No-op if not connected."""

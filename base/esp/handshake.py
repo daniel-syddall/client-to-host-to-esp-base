@@ -8,14 +8,17 @@ this module is purely responsible for discovery and wiring.
 Typical usage in the client runtime:
 
     manager = HandshakeManager(registry=self._esp_registry, config=config.esp)
-    self._esp_boards = manager.discover()
 
-    # Then in asyncio.gather():
-    *[b.read_loop() for b in self._esp_boards],
+    # Pass a callback; watch_loop calls it for every board as it appears.
+    asyncio.create_task(
+        manager.watch_loop(self._on_board_discovered)
+    )
 """
 
+import asyncio
 import logging
 from pathlib import Path
+from typing import Awaitable, Callable
 
 from base.esp.serial import ESPSerial
 from base.esp.registry import ESPRegistry, BoardState
@@ -25,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 _SYMLINK_PREFIX = "/dev/esp_port_"
 _MAX_PORTS      = 16
+
+# Type alias for the board-discovered callback.
+BoardAddedCallback = Callable[[ESPSerial], Awaitable[None]]
 
 
 class HandshakeManager:
@@ -36,17 +42,67 @@ class HandshakeManager:
     """
 
     def __init__(self, registry: ESPRegistry, config: ESPConfig) -> None:
-        self._registry = registry
-        self._config   = config
+        self._registry    = registry
+        self._config      = config
+        self._known_ports: set[str] = set()
+        self._next_id:     int      = 0
+
+    # ======================== Dynamic Discovery ======================== #
+
+    async def watch_loop(
+        self,
+        on_board_added: BoardAddedCallback,
+        scan_interval:  float = 5.0,
+    ) -> None:
+        """Discover boards at startup then watch for new ports being plugged in.
+
+        On each scan interval, resolves the current set of available port
+        paths. Any path that has not been seen before triggers a new
+        ESPSerial instance which is registered and passed to on_board_added.
+
+        Boards that disappear mid-run are handled by ESPSerial.read_loop()
+        internally — it keeps retrying the same port path until the device
+        comes back.
+
+        Args:
+            on_board_added: Async callback invoked for each newly discovered
+                            board. Signature: async (board: ESPSerial) -> None
+            scan_interval:  Seconds between port scans. Default 5.0.
+        """
+        logger.info("ESP port watcher started (scan_interval=%.1fs)", scan_interval)
+        while True:
+            ports = self._resolve_ports()
+            for port, baud in sorted(ports):
+                if port in self._known_ports:
+                    continue
+
+                board_id = self._next_id
+                self._next_id += 1
+                self._known_ports.add(port)
+
+                board = ESPSerial(
+                    board_id=board_id,
+                    port=port,
+                    baud_rate=baud,
+                )
+                self._registry.register(board_id, port)
+                self._wire_registry(board)
+
+                logger.info(
+                    "New ESP board discovered: id=%d port=%s",
+                    board_id, port,
+                )
+                await on_board_added(board)
+
+            await asyncio.sleep(scan_interval)
+
+    # ======================== One-shot Discovery (legacy) ======================== #
 
     def discover(self) -> list[ESPSerial]:
-        """Scan for connected boards and return configured ESPSerial instances.
+        """Synchronous one-shot scan. Returns all currently connected boards.
 
-        Each returned instance is ready for `asyncio.create_task(board.read_loop())`.
-        Boards are assigned IDs 0..N in symlink order (/dev/esp_port_0 first).
-
-        If explicit ports are defined in config.esp.ports, those are used.
-        Otherwise, all present /dev/esp_port_* symlinks are used.
+        Prefer watch_loop() for new code — it handles hot-plug and initial
+        discovery in a single coroutine.
         """
         ports = self._resolve_ports()
 
@@ -58,15 +114,17 @@ class HandshakeManager:
             )
             return []
 
-        logger.info("Discovered %d ESP board(s): %s", len(ports), ports)
+        logger.info("Discovered %d ESP board(s): %s", len(ports), [p for p, _ in ports])
 
         boards: list[ESPSerial] = []
-        for board_id, (port, baud) in enumerate(ports):
-            board = ESPSerial(
-                board_id=board_id,
-                port=port,
-                baud_rate=baud,
-            )
+        for port, baud in sorted(ports):
+            if port in self._known_ports:
+                continue
+            board_id = self._next_id
+            self._next_id += 1
+            self._known_ports.add(port)
+
+            board = ESPSerial(board_id=board_id, port=port, baud_rate=baud)
             self._registry.register(board_id, port)
             self._wire_registry(board)
             boards.append(board)
@@ -81,22 +139,17 @@ class HandshakeManager:
         Prefers explicit config entries; falls back to auto-discovery.
         """
         if self._config.ports:
-            # Use the ports declared in config — filter to those present.
             result = []
             for entry in self._config.ports:
                 if Path(entry.symlink).exists():
                     result.append((entry.symlink, entry.baud_rate))
                 else:
-                    logger.warning("Configured port not present: %s", entry.symlink)
+                    logger.debug("Configured port not present: %s", entry.symlink)
             return result
 
         # Auto-discover: scan /dev/esp_port_0 .. /dev/esp_port_N.
+        default_baud = 921600
         result = []
-        default_baud = (
-            self._config.ports[0].baud_rate
-            if self._config.ports
-            else 921600
-        )
         for i in range(_MAX_PORTS):
             path = Path(f"{_SYMLINK_PREFIX}{i}")
             if path.exists():

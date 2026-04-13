@@ -33,6 +33,7 @@ class ProjectMessageType(str, Enum):
     FLASH_REQUEST = "flash_request"  # Host → Pi: trigger firmware flash on boards.
     FLASH_RESULT  = "flash_result"   # Pi → Host: per-board flash outcome.
     ESP_COMMAND   = "esp_command"    # Host → Pi: relay a command to specific board(s).
+    ESP_REBOOT    = "esp_reboot"     # Host → Pi: force reconnect/re-handshake on board(s).
 
     # ── PROJECT-SPECIFIC: Add your message types here, e.g.: ── #
     # SENSOR_DATA = "sensor_data"

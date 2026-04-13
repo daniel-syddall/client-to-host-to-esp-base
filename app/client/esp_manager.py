@@ -98,12 +98,7 @@ class ESPManager:
             board_id: Session ID of the board that sent the frame.
             payload:  Raw binary payload bytes (everything after the frame header).
         """
-        # PROJECT-SPECIFIC: Parse your binary payload and process it.
-        #
-        # Example — 4-byte big-endian sequence number:
-        #   if len(payload) >= 4:
-        #       seq = int.from_bytes(payload[:4], "big")
-        #       logger.debug("Board %d seq=%d", board_id, seq)
+        # PROJECT-SPECIFIC: Replace this block with real payload parsing.
         #
         # Example — Nanosecond-timestamp record:
         #   if len(payload) >= 12:
@@ -112,9 +107,6 @@ class ESPManager:
         #       rssi     = int.from_bytes(payload[10:12],"little")  # int16 signed
         #       record = {"board_id": board_id, "ts_ns": ts_ns, "ch": channel, "rssi": rssi}
         #       await self._forward_data(record)
-        #
-        # Example — Correlation across boards:
-        #   await self._correlate(board_id, payload)
 
         now   = time.monotonic()
         stats = self._board_stats.setdefault(board_id, {
@@ -145,7 +137,6 @@ class ESPManager:
 
             if gap > _RECONNECT_GAP:
                 # The firmware kept running while the client was stopped.
-                # Reset per-session counters so rate reflects the new session.
                 logger.info(
                     "Board %d: seq resumed at %d after reconnect "
                     "(%d frames counted while client was down)",
@@ -154,6 +145,13 @@ class ESPManager:
                 stats["frames"]        = 1
                 stats["drops"]         = 0
                 stats["session_start"] = now
+                await self._forward_data({
+                    "board_id": board_id,
+                    "event":    "reconnect",
+                    "seq":      seq,
+                    "gap":      gap,
+                    "ts":       time.time(),
+                })
 
             elif gap > 0:
                 # Small positive gap — genuine frame drops on the link.
@@ -162,6 +160,13 @@ class ESPManager:
                     "Board %d: %d frame(s) dropped (seq %d → %d)",
                     board_id, gap, last, seq,
                 )
+                await self._forward_data({
+                    "board_id": board_id,
+                    "event":    "drop",
+                    "seq":      seq,
+                    "gap":      gap,
+                    "ts":       time.time(),
+                })
 
             elif gap < 0:
                 # Seq went backwards — firmware rebooted (power cycle or reset).
@@ -172,6 +177,13 @@ class ESPManager:
                 stats["frames"]        = 1
                 stats["drops"]         = 0
                 stats["session_start"] = now
+                await self._forward_data({
+                    "board_id":   board_id,
+                    "event":      "reboot",
+                    "seq":        seq,
+                    "last_seq":   last,
+                    "ts":         time.time(),
+                })
 
         stats["last_seq"] = seq
         logger.debug("Board %d seq=%d", board_id, seq)
@@ -187,8 +199,16 @@ class ESPManager:
                 "frames=%d  drops=%d (%.1f%%)",
                 board_id, seq, rate, stats["frames"], stats["drops"], drop_pct,
             )
-
-        # PROJECT-SPECIFIC: Replace this block with real payload parsing.
+            await self._forward_data({
+                "board_id": board_id,
+                "event":    "health",
+                "seq":      seq,
+                "frames":   stats["frames"],
+                "drops":    stats["drops"],
+                "rate":     round(rate, 2),
+                "drop_pct": round(drop_pct, 1),
+                "ts":       time.time(),
+            })
 
     # ======================== Helpers ======================== #
 

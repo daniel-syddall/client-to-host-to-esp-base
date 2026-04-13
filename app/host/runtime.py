@@ -7,6 +7,8 @@ Instantiated from config and started with a single `run()` call.
 
 import asyncio
 import logging
+import time
+from collections import deque
 from pathlib import Path
 
 from base.comms import MQTTClient, TopicManager, HeartbeatLoop, build_envelope
@@ -45,6 +47,10 @@ class HostRuntime:
             timeout=15.0,
             offline_after=30.0,
         )
+
+        # In-memory ESP console buffer: {pid: deque of recent event dicts}.
+        # Populated when esp_data messages arrive; served by the console API.
+        self._esp_console: dict[str, deque] = {}
 
         # Remote SSH clients.
         self._remotes: dict[str, RemoteClient] = {
@@ -135,7 +141,10 @@ class HostRuntime:
         self._api.app.include_router(base_router)
 
         # Project routes.
-        init_project_routes(self._store, self._registry, self._mqtt, self._topics)
+        init_project_routes(
+            self._store, self._registry, self._mqtt, self._topics,
+            console=self._esp_console,
+        )
         self._api.app.include_router(project_router)
 
         # Remote management endpoints.
@@ -323,6 +332,15 @@ class HostRuntime:
                 peer.last_payload["esp_boards"]  = data.get("boards", [])
                 peer.last_payload["esp_running"]  = data.get("running", 0)
                 peer.last_payload["esp_total"]    = data.get("total", 0)
+
+        elif msg_type == "esp_data":
+            # Append to the in-memory console ring-buffer (max 200 entries/client).
+            buf = self._esp_console.setdefault(sender, deque(maxlen=200))
+            entry = dict(data)
+            entry["_pid"] = sender
+            if "_ts" not in entry:
+                entry["_ts"] = time.time()
+            buf.append(entry)
 
         elif msg_type == "flash_result":
             results = data.get("results", {})

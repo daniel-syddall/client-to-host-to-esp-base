@@ -16,26 +16,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/project", tags=["project"])
 
 # Runtime dependencies — injected at startup.
-_store = None
+_store    = None
 _registry = None
-_mqtt = None
-_topics = None
+_mqtt     = None
+_topics   = None
+_console: dict[str, list] = {}   # pid → list of recent ESP data events (in-memory)
 
 
-def init_project_routes(store, registry, mqtt, topics) -> None:
+def init_project_routes(store, registry, mqtt, topics, console: dict | None = None) -> None:
     """Inject runtime dependencies into the route handlers.
 
     Args:
-        store: HostStore instance.
+        store:    HostStore instance.
         registry: PeerRegistry instance.
-        mqtt: MQTTClient instance.
-        topics: TopicManager instance.
+        mqtt:     MQTTClient instance.
+        topics:   TopicManager instance.
+        console:  Shared in-memory ESP console buffer {pid: [event, ...]}.
     """
-    global _store, _registry, _mqtt, _topics
-    _store = store
+    global _store, _registry, _mqtt, _topics, _console
+    _store    = store
     _registry = registry
-    _mqtt = mqtt
-    _topics = topics
+    _mqtt     = mqtt
+    _topics   = topics
+    if console is not None:
+        _console = console
 
 
 # ======================== Stats ======================== #
@@ -44,8 +48,8 @@ def init_project_routes(store, registry, mqtt, topics) -> None:
 async def get_stats() -> dict[str, Any]:
     """Get database statistics."""
     stats = await _store.stats()
-    stats["clients"] = _registry.summary() if _registry else {}
-    stats["clients_online"] = _registry.online_count if _registry else 0
+    stats["clients"]          = _registry.summary() if _registry else {}
+    stats["clients_online"]   = _registry.online_count if _registry else 0
     stats["clients_expected"] = _registry.expected_count if _registry else 0
     return stats
 
@@ -60,7 +64,7 @@ async def get_stats() -> dict[str, Any]:
 #     return await _store.get_all_readings()
 
 
-# ======================== ESP Endpoints ======================== #
+# ======================== ESP Status ======================== #
 
 @router.get("/esp/status")
 async def get_esp_status() -> dict[str, Any]:
@@ -81,6 +85,32 @@ async def get_esp_status() -> dict[str, Any]:
     return result
 
 
+# ======================== ESP Console ======================== #
+
+@router.get("/esp/console")
+async def get_esp_console(
+    pid:   str | None = None,
+    limit: int        = 50,
+) -> dict[str, list]:
+    """Return recent ESP data events from the in-memory console buffer.
+
+    Args:
+        pid:   If provided, return only events for that client.
+               If omitted, return events for all clients.
+        limit: Maximum number of events to return per client.
+
+    Returns:
+        Dict keyed by client PID, each value a list of event dicts
+        (most recent last).
+    """
+    if pid:
+        entries = _console.get(pid, [])
+        return {pid: entries[-limit:]}
+    return {p: events[-limit:] for p, events in _console.items()}
+
+
+# ======================== ESP Flash ======================== #
+
 class FlashRequest(BaseModel):
     """Request body for triggering firmware flash on a client's boards."""
     pid:   str
@@ -89,11 +119,7 @@ class FlashRequest(BaseModel):
 
 @router.post("/esp/flash")
 async def flash_esp(req: FlashRequest) -> dict[str, str]:
-    """Send a FLASH_REQUEST command to a specific client.
-
-    The client will flash the specified ports (or all boards if ports is empty),
-    then publish a FLASH_RESULT message back to the host.
-    """
+    """Send a FLASH_REQUEST command to a specific client."""
     if not _mqtt or not _topics:
         raise HTTPException(status_code=503, detail="MQTT not available")
     from base.comms import build_envelope
@@ -107,6 +133,46 @@ async def flash_esp(req: FlashRequest) -> dict[str, str]:
     logger.info("Flash request sent to %s (ports=%s)", req.pid, req.ports or "all")
     return {"status": "sent", "pid": req.pid, "topic": topic}
 
+
+# ======================== ESP Reboot ======================== #
+
+class ESPRebootRequest(BaseModel):
+    """Request body for triggering a reconnect/re-handshake on board(s)."""
+    pid:       str
+    board_ids: list[int] = []   # Empty = reboot all boards on that client.
+
+
+@router.post("/esp/reboot")
+async def reboot_esp_boards(req: ESPRebootRequest) -> dict[str, str]:
+    """Send an ESP_REBOOT command to a client, triggering a re-handshake.
+
+    The client closes the serial connection for each targeted board, which
+    causes the board's read_loop to reconnect and run a fresh INIT→ACK→START
+    handshake. The firmware handles the re-INIT while running, pausing and
+    resuming its data_task without a hardware reset.
+
+    Args:
+        pid:       Client (Pi) to target.
+        board_ids: Board IDs to reboot. Empty means all boards on that client.
+    """
+    if not _mqtt or not _topics:
+        raise HTTPException(status_code=503, detail="MQTT not available")
+    from base.comms import build_envelope
+    envelope = build_envelope(
+        sender="host",
+        msg_type="esp_reboot",
+        payload={"board_ids": req.board_ids},
+    )
+    topic = _topics.host_command_to(req.pid)
+    await _mqtt.publish(topic, envelope)
+    logger.info(
+        "ESP reboot sent to %s (boards=%s)",
+        req.pid, req.board_ids or "all",
+    )
+    return {"status": "sent", "pid": req.pid, "boards": str(req.board_ids or "all")}
+
+
+# ======================== ESP Generic Command ======================== #
 
 class ESPCommandRequest(BaseModel):
     """Request body for relaying a command to ESP boards on a client."""
@@ -136,7 +202,10 @@ async def send_esp_command(req: ESPCommandRequest) -> dict[str, str]:
     )
     topic = _topics.host_command_to(req.pid)
     await _mqtt.publish(topic, envelope)
-    logger.info("ESP command '%s' sent to %s (boards=%s)", req.cmd, req.pid, req.board_ids or "all")
+    logger.info(
+        "ESP command '%s' sent to %s (boards=%s)",
+        req.cmd, req.pid, req.board_ids or "all",
+    )
     return {"status": "sent", "pid": req.pid, "cmd": req.cmd, "topic": topic}
 
 
@@ -144,7 +213,7 @@ async def send_esp_command(req: ESPCommandRequest) -> dict[str, str]:
 
 class CommandRequest(BaseModel):
     """Request body for sending a command to a client."""
-    pid: str
+    pid:     str
     command: str
     payload: dict[str, Any] = {}
 

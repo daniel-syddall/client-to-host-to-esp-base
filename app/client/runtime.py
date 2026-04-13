@@ -54,7 +54,11 @@ class ClientRuntime:
             config=config.esp,
         )
         self._esp_flash = FlashManager(esp_dir=config.esp.esp_dir)
-        self._esp_boards: list[ESPSerial] = []
+
+        # Boards are populated dynamically by the port watcher.
+        self._esp_boards:      list[ESPSerial]          = []
+        self._esp_board_tasks: dict[int, asyncio.Task]  = {}
+
         self._esp_manager = ESPManager(
             config=config,
             mqtt=self._mqtt,
@@ -80,12 +84,6 @@ class ClientRuntime:
         # Database.
         await self._store.start()
 
-        # Discover ESP boards and wire handlers before connecting to MQTT.
-        self._esp_boards = self._esp_handshake.discover()
-        for board in self._esp_boards:
-            board.on_control(self._esp_manager.on_control)
-            board.on_data(self._esp_manager.on_data)
-
         # State change callbacks.
         self._host_tracker.on_state_change(self._on_host_state_change)
         self._esp_registry.on_state_change(self._on_esp_state_change)
@@ -97,30 +95,54 @@ class ClientRuntime:
 
         # Connect to broker.
         await self._mqtt.start()
-        logger.info(
-            "Client %s online — %d ESP board(s) configured",
-            self.pid, len(self._esp_boards),
-        )
+        logger.info("Client %s online — ESP port watcher starting", self.pid)
 
-        # Build the task list.
-        tasks: list = [
-            self._heartbeat.run(),
-            self._host_tracker.run(),
-            self._esp_registry.run(),
-            self._esp_status_loop(),
-            # One read_loop() task per discovered board.
-            *[b.read_loop() for b in self._esp_boards],
-            # PROJECT-SPECIFIC: Add your async tasks here, e.g.:
-            # self._capture_loop(),
+        # Build the fixed task set. Board tasks are created dynamically via
+        # _on_board_discovered as the port watcher finds new devices.
+        tasks = [
+            asyncio.create_task(self._heartbeat.run(),         name="heartbeat"),
+            asyncio.create_task(self._host_tracker.run(),      name="host-tracker"),
+            asyncio.create_task(self._esp_registry.run(),      name="esp-registry"),
+            asyncio.create_task(self._esp_status_loop(),       name="esp-status"),
+            asyncio.create_task(
+                self._esp_handshake.watch_loop(self._on_board_discovered),
+                name="esp-watcher",
+            ),
         ]
 
         try:
             await asyncio.gather(*tasks)
         finally:
+            # Cancel board tasks before tearing down shared resources.
+            for task in self._esp_board_tasks.values():
+                task.cancel()
             self._heartbeat.stop()
             await self._store.stop()
             await self._mqtt.stop()
             logger.info("Client %s shut down", self.pid)
+
+    # ======================== Board Discovery Callback ======================== #
+
+    async def _on_board_discovered(self, board: ESPSerial) -> None:
+        """Called by the port watcher for each newly found ESP board.
+
+        Wires data/control handlers, appends to the board list, and starts
+        the board's read_loop as an independent asyncio task.
+        """
+        board.on_control(self._esp_manager.on_control)
+        board.on_data(self._esp_manager.on_data)
+        self._esp_boards.append(board)
+
+        task = asyncio.create_task(
+            board.read_loop(),
+            name=f"esp-board-{board.board_id}",
+        )
+        self._esp_board_tasks[board.board_id] = task
+
+        logger.info(
+            "Board %d started (port=%s) — %d board(s) active",
+            board.board_id, board.port, len(self._esp_boards),
+        )
 
     # ======================== ESP Periodic Tasks ======================== #
 
@@ -142,9 +164,9 @@ class ClientRuntime:
             if self._esp_registry.total_count > 0:
                 boards_list = [
                     {
-                        "board_id": b.board_id,
-                        "port":     b.port,
-                        "state":    b.state.value,
+                        "board_id":  b.board_id,
+                        "port":      b.port,
+                        "state":     b.state.value,
                         "last_seen": b.last_seen,
                     }
                     for b in self._esp_registry.boards.values()
@@ -173,7 +195,7 @@ class ClientRuntime:
         data     = payload.get("payload", {})
         logger.info("Command received: %s", msg_type)
 
-        # ── ESP commands ── #
+        # ── ESP board control ── #
 
         if msg_type == ProjectMessageType.FLASH_REQUEST:
             ports   = data.get("ports", [])
@@ -193,14 +215,24 @@ class ClientRuntime:
             if not cmd:
                 return
             from base.esp.protocol import build_command
-            frame    = build_command(cmd, **args)
-            targets  = (
+            frame   = build_command(cmd, **args)
+            targets = (
                 [b for b in self._esp_boards if b.board_id in board_ids]
-                if board_ids else
-                self._esp_boards
+                if board_ids else self._esp_boards
             )
             for board in targets:
                 await board.write(frame)
+
+        elif msg_type == ProjectMessageType.ESP_REBOOT:
+            # Force a disconnect → reconnect → re-handshake on specific boards.
+            board_ids = data.get("board_ids", [])
+            targets = (
+                [b for b in self._esp_boards if b.board_id in board_ids]
+                if board_ids else self._esp_boards
+            )
+            for board in targets:
+                logger.info("Reboot requested for board %d", board.board_id)
+                asyncio.create_task(board.restart())
 
         elif msg_type == "clock_sync_esp":
             # Sync Pi's current time to all running boards.
@@ -231,12 +263,8 @@ class ClientRuntime:
         elif new == PeerState.OFFLINE:
             logger.error("Host is OFFLINE — operating in standalone mode")
 
-    async def _on_esp_state_change(
-        self, board_id: int, old, new
-    ) -> None:
-        logger.info(
-            "ESP board %d: %s -> %s", board_id, old.value, new.value
-        )
+    async def _on_esp_state_change(self, board_id: int, old, new) -> None:
+        logger.info("ESP board %d: %s -> %s", board_id, old.value, new.value)
 
     # ======================== Heartbeat ======================== #
 

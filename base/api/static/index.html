@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Dashboard</title>
+    <title>ESP Dashboard</title>
     <style>
         :root {
             --bg:       #0f1117;
@@ -25,7 +25,7 @@
             padding: 20px;
         }
 
-        /* Header */
+        /* ── Header ─────────────────────────────────────────────────────── */
         .header {
             display: flex;
             justify-content: space-between;
@@ -43,14 +43,14 @@
             margin-right: 6px;
             vertical-align: middle;
         }
-        .dot-online  { background: var(--green); }
-        .dot-stale   { background: var(--yellow); }
-        .dot-offline { background: var(--red); }
+        .dot-online    { background: var(--green); }
+        .dot-stale     { background: var(--yellow); }
+        .dot-offline   { background: var(--red); }
         .dot-unknown   { background: var(--dim); }
         .dot-rebooting { background: var(--orange); animation: blink 1s ease-in-out infinite; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-        /* Stat Cards */
+        /* ── Stat Cards ──────────────────────────────────────────────────── */
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -66,10 +66,20 @@
         .stat-card .label { font-size: 0.75rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; }
         .stat-card .value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; color: var(--accent); }
 
-        /* Client cards */
+        /* ── Section titles ──────────────────────────────────────────────── */
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 12px;
+        }
+
+        /* ── Client cards ────────────────────────────────────────────────── */
         .client-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 12px;
             margin-bottom: 24px;
         }
@@ -79,78 +89,10 @@
             border-radius: 8px;
             padding: 16px;
         }
-        .client-card .pid { font-weight: 600; font-size: 1rem; }
+        .client-card .pid   { font-weight: 600; font-size: 1rem; }
         .client-card .state { font-size: 0.8rem; margin-top: 4px; }
 
-        /* Tables */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--surface);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        th {
-            text-align: left;
-            padding: 10px 14px;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--dim);
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-        }
-        td {
-            padding: 10px 14px;
-            font-size: 0.85rem;
-            border-bottom: 1px solid var(--border);
-            font-family: 'Cascadia Code', 'Fira Code', monospace;
-        }
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: rgba(91, 156, 246, 0.05); }
-
-        /* Footer */
-        .footer {
-            margin-top: 32px;
-            text-align: center;
-            font-size: 0.75rem;
-            color: var(--dim);
-        }
-
-        /* Empty state */
-        .empty { padding: 40px; text-align: center; color: var(--dim); }
-
-        /* Client card actions */
-        .client-card .card-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 12px;
-            padding-top: 10px;
-            border-top: 1px solid var(--border);
-        }
-        .btn {
-            padding: 5px 12px;
-            border: none;
-            border-radius: 5px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .btn-danger { background: var(--red); color: #fff; }
-        .btn-danger:hover { opacity: 0.85; }
-        .autoboot-label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.8rem;
-            color: var(--dim);
-            cursor: pointer;
-            margin-left: auto;
-        }
-        .autoboot-label input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
-
-        /* ESP board section inside client card */
+        /* ── ESP boards within client card ───────────────────────────────── */
         .esp-boards {
             margin-top: 10px;
             padding-top: 10px;
@@ -171,16 +113,124 @@
             font-size: 0.8rem;
             font-family: 'Cascadia Code', 'Fira Code', monospace;
         }
-        .esp-board-id   { color: var(--text); min-width: 54px; }
-        .esp-board-port { color: var(--dim); flex: 1; }
-        .esp-board-state { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; }
+        .esp-board-id   { color: var(--text); min-width: 52px; }
+        .esp-board-port { color: var(--dim); flex: 1; font-size: 0.72rem; }
+        .esp-board-state {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            min-width: 72px;
+            text-align: right;
+        }
         .dot-running      { background: var(--green); }
         .dot-ready        { background: var(--accent); }
         .dot-waiting      { background: var(--yellow); }
-        .dot-stale        { background: var(--orange); }
         .dot-disconnected { background: var(--red); }
 
-        /* Manage clients table */
+        /* ── Client card actions ─────────────────────────────────────────── */
+        .client-card .card-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+        .btn {
+            padding: 5px 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-danger  { background: var(--red);    color: #fff; }
+        .btn-warning { background: var(--orange);  color: #fff; }
+        .btn-danger:hover, .btn-warning:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .autoboot-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--dim);
+            cursor: pointer;
+            margin-left: auto;
+        }
+        .autoboot-label input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
+
+        /* ── ESP Console ─────────────────────────────────────────────────── */
+        .console-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .console-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .console-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--dim);
+        }
+        .console-panel-header .pid-label {
+            font-weight: 600;
+            color: var(--text);
+        }
+        .console-body {
+            background: #0a0c14;
+            padding: 10px 12px;
+            height: 240px;
+            overflow-y: auto;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.76rem;
+            line-height: 1.55;
+            scroll-behavior: smooth;
+        }
+        .console-body .line { white-space: pre; }
+        .line-health    { color: #9aa; }
+        .line-drop      { color: var(--red); }
+        .line-reconnect { color: var(--yellow); }
+        .line-reboot    { color: var(--orange); }
+        .line-empty     { color: var(--dim); font-style: italic; padding: 80px 0; text-align: center; }
+
+        /* ── Tables ──────────────────────────────────────────────────────── */
+        .table-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 0.73rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--dim);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            border-bottom: 1px solid var(--border);
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(91, 156, 246, 0.04); }
+
+        /* ── Manage clients header ───────────────────────────────────────── */
         .section-header {
             display: flex;
             justify-content: space-between;
@@ -200,7 +250,7 @@
         .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
         .btn-ghost-danger:hover { border-color: var(--red); color: var(--red); }
 
-        /* Modal */
+        /* ── Modal ───────────────────────────────────────────────────────── */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -253,12 +303,16 @@
             gap: 8px;
             margin-top: 18px;
         }
+
+        /* ── Footer / empty ──────────────────────────────────────────────── */
+        .footer { margin-top: 32px; text-align: center; font-size: 0.75rem; color: var(--dim); }
+        .empty  { padding: 40px; text-align: center; color: var(--dim); font-family: inherit; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h1>Project Dashboard</h1>
+    <h1>ESP Dashboard</h1>
     <div class="status">
         <span class="dot dot-unknown" id="conn-dot"></span>
         <span id="conn-text">Connecting...</span>
@@ -273,50 +327,42 @@
         <div class="value" id="stat-clients">—</div>
     </div>
     <div class="stat-card">
+        <div class="label">ESP Boards Running</div>
+        <div class="value" id="stat-esp">—</div>
+    </div>
+    <div class="stat-card">
         <div class="label">DB Size</div>
         <div class="value" id="stat-db">— MB</div>
     </div>
-    <div class="stat-card">
-        <div class="label">ESP Boards</div>
-        <div class="value" id="stat-esp">—</div>
-    </div>
-    <!-- PROJECT-SPECIFIC: Add more stat cards here, e.g.:
-    <div class="stat-card">
-        <div class="label">Sensor Readings</div>
-        <div class="value" id="stat-readings">—</div>
-    </div>
-    -->
 </div>
 
-<!-- Client Status -->
-<h3 style="margin-bottom: 12px; font-size: 0.9rem; color: var(--dim);">CLIENTS</h3>
+<!-- Client Cards -->
+<div class="section-title">CLIENTS</div>
 <div class="client-grid" id="client-grid"></div>
 
-<!-- PROJECT-SPECIFIC: Add data tables, tabs, or other UI below. Example:
-<h3 style="margin-bottom: 12px; font-size: 0.9rem; color: var(--dim);">DATA</h3>
-<table>
-    <thead><tr><th>ID</th><th>Value</th><th>Timestamp</th></tr></thead>
-    <tbody id="table-data"></tbody>
-</table>
--->
+<!-- ESP Console -->
+<div class="section-title">ESP CONSOLE</div>
+<div class="console-grid" id="console-grid">
+    <div class="empty">Waiting for ESP data...</div>
+</div>
 
-<!-- Client Management -->
-<div class="section-header" style="margin-top: 32px;">
+<!-- Manage Clients -->
+<div class="section-header" style="margin-top: 8px;">
     <h3>MANAGE CLIENTS</h3>
     <button class="btn btn-primary" onclick="openModal()">+ Add Client</button>
 </div>
-<table>
-    <thead>
-        <tr>
-            <th>ID</th><th>IP</th><th>User</th><th>Container</th><th></th>
-        </tr>
-    </thead>
-    <tbody id="manage-body">
-        <tr><td colspan="6" class="empty">Loading...</td></tr>
-    </tbody>
-</table>
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr><th>ID</th><th>IP</th><th>User</th><th>Container</th><th></th></tr>
+        </thead>
+        <tbody id="manage-body">
+            <tr><td colspan="5" class="empty">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
 
-<!-- Add / Edit Modal -->
+<!-- Add / Edit Client Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOnBackdrop(event)">
     <div class="modal">
         <h2 id="modal-title">Add Client</h2>
@@ -347,32 +393,26 @@
     </div>
 </div>
 
-<div class="footer">Project Baseplate Dashboard</div>
+<div class="footer">ESP Baseplate Dashboard</div>
 
 <script>
-    const API = '';
+    const API        = '';
     const REFRESH_MS = 3000;
 
-    const _deletedClients  = new Set();
+    const _deletedClients   = new Set();
     const _rebootingClients = new Set();
+    const _autoboot         = {};
+    let   _espStatus        = {};
+    let   _lastAutobootFetch = 0;
 
-    // Fetch helper
+    // ── Helpers ───────────────────────────────────────────────────────────── //
+
     async function api(path) {
         const r = await fetch(API + path);
         if (!r.ok) throw new Error(r.statusText);
         return r.json();
     }
 
-    // Format timestamp
-    function fmtTime(ts) {
-        if (!ts) return '—';
-        try {
-            const d = new Date(ts);
-            return d.toLocaleTimeString();
-        } catch { return ts; }
-    }
-
-    // State dot class — client peer states
     function dotClass(state) {
         if (state === 'online')    return 'dot-online';
         if (state === 'stale')     return 'dot-stale';
@@ -381,7 +421,6 @@
         return 'dot-unknown';
     }
 
-    // State dot class — ESP board states
     function espDotClass(state) {
         if (state === 'running')      return 'dot-running';
         if (state === 'ready')        return 'dot-ready';
@@ -391,48 +430,68 @@
         return 'dot-unknown';
     }
 
-    // ESP board status cache — keyed by client pid
-    let _espStatus = {};
+    function espStateColor(state) {
+        if (state === 'running')      return 'var(--green)';
+        if (state === 'disconnected') return 'var(--red)';
+        if (state === 'waiting')      return 'var(--yellow)';
+        if (state === 'stale')        return 'var(--orange)';
+        return 'var(--dim)';
+    }
 
-    // Update stats
+    function fmtTs(ts) {
+        if (!ts) return '--:--:--';
+        const d = new Date(ts * 1000);
+        return d.toLocaleTimeString('en-GB', { hour12: false });
+    }
+
+    // ── Stats + Client Cards ──────────────────────────────────────────────── //
+
     async function refreshStats() {
         try {
             const s = await api('/api/project/stats');
-            document.getElementById('stat-clients').textContent = `${s.clients_online ?? 0} / ${s.clients_expected ?? 0}`;
-            document.getElementById('stat-db').textContent = `${s.db_size_mb ?? 0} MB`;
+            document.getElementById('stat-clients').textContent =
+                `${s.clients_online ?? 0} / ${s.clients_expected ?? 0}`;
+            const mb = s.db_size_mb ?? 0;
+            document.getElementById('stat-db').textContent =
+                mb < 0.01 ? `${(mb * 1024).toFixed(1)} KB` : `${mb.toFixed(2)} MB`;
 
-            // PROJECT-SPECIFIC: Update your stat cards here, e.g.:
-            // document.getElementById('stat-readings').textContent = s.sensor_readings ?? '—';
-
-            // Client cards
-            const grid = document.getElementById('client-grid');
+            const grid    = document.getElementById('client-grid');
             const clients = s.clients || {};
-            const visibleClients = Object.entries(clients).filter(([pid]) => !_deletedClients.has(pid));
-            if (visibleClients.length === 0) {
+            const visible = Object.entries(clients).filter(([pid]) => !_deletedClients.has(pid));
+
+            if (!visible.length) {
                 grid.innerHTML = '<div class="empty">No clients configured</div>';
             } else {
-                grid.innerHTML = visibleClients.map(([pid, state]) => {
-                    // Clear rebooting state once the client is confirmed back online
-                    if (_rebootingClients.has(pid) && state === 'online') {
+                grid.innerHTML = visible.map(([pid, state]) => {
+                    if (_rebootingClients.has(pid) && state === 'online')
                         _rebootingClients.delete(pid);
-                    }
                     const displayState = _rebootingClients.has(pid) ? 'rebooting' : state;
                     const isRebooting  = displayState === 'rebooting';
-                    const ab = _autoboot[pid];
+                    const ab      = _autoboot[pid];
                     const checked = ab === true ? 'checked' : '';
-                    const esp = _espStatus[pid] || {};
-                    const boards = esp.esp_boards || [];
+                    const esp     = _espStatus[pid] || {};
+                    const boards  = esp.esp_boards || [];
+
                     const espHtml = boards.length > 0 ? `
                         <div class="esp-boards">
-                            <div class="esp-boards-header">ESP Boards &nbsp;${esp.esp_running ?? 0} / ${esp.esp_total ?? 0} running</div>
+                            <div class="esp-boards-header">
+                                ESP Boards &nbsp;
+                                <span style="color:var(--text)">${esp.esp_running ?? 0}/${esp.esp_total ?? 0}</span>
+                                running
+                            </div>
                             ${boards.map(b => `
                                 <div class="esp-board-row">
                                     <span class="dot ${espDotClass(b.state)}"></span>
                                     <span class="esp-board-id">Board ${b.board_id}</span>
                                     <span class="esp-board-port">${b.port}</span>
-                                    <span class="esp-board-state" style="color:var(--${b.state === 'running' ? 'green' : b.state === 'disconnected' ? 'red' : b.state === 'waiting' ? 'yellow' : 'dim'})">${b.state}</span>
+                                    <span class="esp-board-state" style="color:${espStateColor(b.state)}">${b.state}</span>
+                                    <button class="btn btn-warning"
+                                        style="padding:2px 8px;font-size:0.7rem"
+                                        onclick="rebootBoard('${pid}', ${b.board_id}, this)"
+                                        title="Reboot Board ${b.board_id}">↺</button>
                                 </div>`).join('')}
                         </div>` : '';
+
                     return `
                     <div class="client-card">
                         <div class="pid"><span class="dot ${dotClass(displayState)}"></span> ${pid}</div>
@@ -440,7 +499,7 @@
                         ${espHtml}
                         <div class="card-actions">
                             <button class="btn btn-danger" onclick="rebootClient('${pid}')"
-                                ${isRebooting ? 'disabled' : ''}>Reboot</button>
+                                ${isRebooting ? 'disabled' : ''}>Reboot Pi</button>
                             <label class="autoboot-label">
                                 <input type="checkbox" id="autoboot-${pid}" ${checked}
                                     onchange="setAutoboot('${pid}', this.checked)">
@@ -455,7 +514,6 @@
         }
     }
 
-    // Update system status
     async function refreshStatus() {
         try {
             const s = await api('/api/status');
@@ -468,9 +526,112 @@
         }
     }
 
-    // ── Autoboot state cache ──────────────────────────────────────────────── //
-    const _autoboot = {};
-    let _lastAutobootFetch = 0;
+    // ── ESP Board Status ──────────────────────────────────────────────────── //
+
+    async function refreshESP() {
+        try {
+            const data = await api('/api/project/esp/status');
+            _espStatus = data;
+            const totalRunning = Object.values(data).reduce((s, c) => s + (c.esp_running || 0), 0);
+            const totalBoards  = Object.values(data).reduce((s, c) => s + (c.esp_total  || 0), 0);
+            document.getElementById('stat-esp').textContent =
+                `${totalRunning} / ${totalBoards}`;
+        } catch(e) {
+            console.warn('ESP status fetch failed:', e);
+        }
+    }
+
+    // ── ESP Console ───────────────────────────────────────────────────────── //
+
+    // Local buffer: {pid: [line_html, ...]}  — keeps lines across fetches.
+    const _consoleLines = {};
+
+    function fmtConsoleLine(ev) {
+        const ts  = fmtTs(ev.ts || ev._ts);
+        const bid = ev.board_id ?? '?';
+        switch (ev.event) {
+            case 'health':
+                return {
+                    cls: 'line-health',
+                    txt: `[${ts}]  Board ${bid}  seq=${String(ev.seq).padStart(6)}  `
+                       + `rate=${(ev.rate ?? 0).toFixed(1)} Hz  `
+                       + `${ev.frames ?? 0} frames  ${ev.drops ?? 0} drops (${ev.drop_pct ?? 0}%)`,
+                };
+            case 'drop':
+                return {
+                    cls: 'line-drop',
+                    txt: `[${ts}]  Board ${bid}  !! ${ev.gap} frame(s) DROPPED  seq ${ev.seq - ev.gap} → ${ev.seq}`,
+                };
+            case 'reconnect':
+                return {
+                    cls: 'line-reconnect',
+                    txt: `[${ts}]  Board ${bid}  ~ RECONNECT  seq resumed at ${ev.seq}  (${ev.gap} frames while down)`,
+                };
+            case 'reboot':
+                return {
+                    cls: 'line-reboot',
+                    txt: `[${ts}]  Board ${bid}  * FIRMWARE REBOOT  seq ${ev.last_seq} → ${ev.seq}`,
+                };
+            default:
+                return {
+                    cls: 'line-health',
+                    txt: `[${ts}]  Board ${bid}  ${JSON.stringify(ev)}`,
+                };
+        }
+    }
+
+    async function refreshConsole() {
+        try {
+            const data = await api('/api/project/esp/console?limit=100');
+            const grid = document.getElementById('console-grid');
+            const pids = Object.keys(data);
+
+            if (!pids.length) {
+                grid.innerHTML = '<div class="empty">Waiting for ESP data...</div>';
+                return;
+            }
+
+            // Build or update a panel per pid.
+            grid.innerHTML = pids.map(pid => `
+                <div class="console-panel">
+                    <div class="console-panel-header">
+                        <span class="pid-label">${pid}</span>
+                        <span>${(data[pid] || []).length} events</span>
+                    </div>
+                    <div class="console-body" id="console-${pid.replace(/[^a-z0-9]/gi,'_')}">
+                    </div>
+                </div>
+            `).join('');
+
+            pids.forEach(pid => {
+                const safeId = pid.replace(/[^a-z0-9]/gi, '_');
+                const body   = document.getElementById(`console-${safeId}`);
+                if (!body) return;
+
+                const events = data[pid] || [];
+                if (!events.length) {
+                    body.innerHTML = '<div class="line-empty">No data yet</div>';
+                    return;
+                }
+
+                body.innerHTML = events.map(ev => {
+                    const { cls, txt } = fmtConsoleLine(ev);
+                    return `<div class="line ${cls}">${escapeHtml(txt)}</div>`;
+                }).join('');
+
+                // Auto-scroll to bottom.
+                body.scrollTop = body.scrollHeight;
+            });
+        } catch(e) {
+            console.warn('Console fetch failed:', e);
+        }
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ── Autoboot ──────────────────────────────────────────────────────────── //
 
     async function fetchAutobootStates(pids) {
         await Promise.all(pids.map(async pid => {
@@ -483,8 +644,10 @@
         }));
     }
 
+    // ── Pi Reboot ─────────────────────────────────────────────────────────── //
+
     async function rebootClient(pid) {
-        if (!confirm(`Reboot ${pid}?`)) return;
+        if (!confirm(`Reboot Pi ${pid}?`)) return;
         try {
             const r = await fetch(`/api/remote/reboot/${pid}`, { method: 'POST' });
             if (!r.ok) {
@@ -492,12 +655,12 @@
                 alert(`Reboot failed: ${err.detail ?? r.statusText}`);
                 return;
             }
-            const data = await r.json();
-            if (data.success) {
+            const d = await r.json();
+            if (d.success) {
                 _rebootingClients.add(pid);
                 refreshStats();
             } else {
-                alert(`Reboot command sent but SSH reported failure for ${pid}. Check SSH credentials.`);
+                alert(`Reboot command sent but SSH reported failure for ${pid}.`);
             }
         } catch(e) {
             alert(`Reboot request failed: ${e.message}`);
@@ -514,42 +677,51 @@
             });
             if (!r.ok) throw new Error(r.statusText);
         } catch(e) {
-            _autoboot[pid] = !enabled; // revert on failure
+            _autoboot[pid] = !enabled;
             const cb = document.getElementById(`autoboot-${pid}`);
             if (cb) cb.checked = !enabled;
             console.warn('Autoboot set failed:', e);
         }
     }
 
-    // Fetch ESP board status for all clients and update the stat card.
-    async function refreshESP() {
+    // ── ESP Board Reboot ──────────────────────────────────────────────────── //
+
+    async function rebootBoard(pid, boardId, btn) {
+        if (!confirm(`Reboot ESP Board ${boardId} on ${pid}?\n\nThe board will re-run its handshake and resume automatically.`)) return;
+        btn.disabled = true;
+        btn.textContent = '…';
         try {
-            const data = await api('/api/project/esp/status');
-            _espStatus = data;
-            const totalRunning = Object.values(data).reduce((s, c) => s + (c.esp_running || 0), 0);
-            const totalBoards  = Object.values(data).reduce((s, c) => s + (c.esp_total  || 0), 0);
-            document.getElementById('stat-esp').textContent = `${totalRunning} / ${totalBoards}`;
+            const r = await fetch('/api/project/esp/reboot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pid, board_ids: [boardId] }),
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                alert(`Reboot failed: ${err.detail ?? r.statusText}`);
+            }
         } catch(e) {
-            console.warn('ESP status fetch failed:', e);
+            alert(`Reboot request failed: ${e.message}`);
+        } finally {
+            // Re-enable after a short delay to prevent rapid double-clicks.
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = '↺';
+            }, 3000);
         }
     }
 
-    // PROJECT-SPECIFIC: Add your data fetch functions here, e.g.:
-    // async function refreshData() { ... }
+    // ── Refresh Loop ──────────────────────────────────────────────────────── //
 
-    // Refresh loop
     async function refresh() {
-        await Promise.all([refreshESP(), refreshStats(), refreshStatus()]);
-        // Sync autoboot state on first load and every 60s (after DOM is built)
+        await Promise.all([refreshESP(), refreshStats(), refreshStatus(), refreshConsole()]);
         const now = Date.now();
         if (now - _lastAutobootFetch > 60000) {
             _lastAutobootFetch = now;
             const pids = Array.from(document.querySelectorAll('[id^="autoboot-"]'))
                 .map(el => el.id.replace('autoboot-', ''));
-            if (pids.length) fetchAutobootStates(pids); // fire-and-forget
+            if (pids.length) fetchAutobootStates(pids);
         }
-        // PROJECT-SPECIFIC: Add your refresh functions here, e.g.:
-        // await refreshData();
     }
     refresh();
     setInterval(refresh, REFRESH_MS);
@@ -562,9 +734,8 @@
         try {
             const clients = await api('/api/config/clients');
             const visible = clients.filter(c => !_deletedClients.has(c.pid));
-            const tbody = document.getElementById('manage-body');
+            const tbody   = document.getElementById('manage-body');
 
-            // Cache client data for the event handler to look up by pid
             _manageClientData = {};
             visible.forEach(c => { _manageClientData[c.pid] = c; });
 
@@ -604,13 +775,13 @@
         const isEdit = !!client;
         document.getElementById('modal-title').textContent = isEdit ? 'Edit Client' : 'Add Client';
         document.getElementById('edit-original-pid').value = isEdit ? client.pid : '';
-        document.getElementById('f-pid').value       = isEdit ? client.pid : '';
-        document.getElementById('f-pid').readOnly    = isEdit;
+        document.getElementById('f-pid').value      = isEdit ? client.pid : '';
+        document.getElementById('f-pid').readOnly   = isEdit;
         document.getElementById('f-pid').style.opacity = isEdit ? '0.5' : '1';
-        document.getElementById('f-pid-note').textContent = isEdit ? '— set by client.toml on the client machine' : '';
-        document.getElementById('f-ip').value        = client ? client.ssh.ip : '';
-        document.getElementById('f-user').value      = client ? client.ssh.user : '';
-        document.getElementById('f-pass').value      = client ? client.ssh.password : '';
+        document.getElementById('f-pid-note').textContent = isEdit ? '— set by client.toml' : '';
+        document.getElementById('f-ip').value       = client ? client.ssh.ip : '';
+        document.getElementById('f-user').value     = client ? client.ssh.user : '';
+        document.getElementById('f-pass').value     = client ? client.ssh.password : '';
         document.getElementById('modal-overlay').classList.add('open');
     }
 
@@ -637,7 +808,7 @@
             return;
         }
         const isEdit = !!originalPid;
-        const url  = isEdit ? `/api/config/clients/${originalPid}` : '/api/config/clients';
+        const url    = isEdit ? `/api/config/clients/${originalPid}` : '/api/config/clients';
         const method = isEdit ? 'PUT' : 'POST';
         try {
             const r = await fetch(url, {
