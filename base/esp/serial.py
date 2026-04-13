@@ -236,41 +236,58 @@ class ESPSerial:
         # ACK JSON, making json.loads() fail.  Instead, scan the incoming bytes
         # directly: discard anything that isn't '{', then capture the complete
         # JSON line and check it for the expected ACK.
-        try:
-            async with asyncio.timeout(_HANDSHAKE_TIMEOUT):
-                buf = bytearray()
-                ack_received = False
-                while not ack_received:
-                    chunk = await reader.read(_READ_CHUNK)
-                    if not chunk:
-                        raise ConnectionError(f"Board {self._board_id}: EOF during handshake")
-                    buf.extend(chunk)
+        #
+        # We re-send INIT every 2 s if no ACK arrives.  This handles the race
+        # where the firmware is in the handle_command() wait-for-START inner
+        # loop when our INIT arrives: the inner loop re-ACKs on a second INIT,
+        # so retrying here ensures we always break the deadlock.
+        buf          = bytearray()
+        ack_received = False
+        deadline     = asyncio.get_event_loop().time() + _HANDSHAKE_TIMEOUT
+        _RETRY_INTERVAL = 2.0
 
-                    while buf:
-                        if buf[0] != ord("{"):
-                            del buf[:1]   # discard binary frame byte
-                            continue
+        while not ack_received:
+            now = asyncio.get_event_loop().time()
+            if now >= deadline:
+                raise TimeoutError(
+                    f"Board {self._board_id}: no ACK within {_HANDSHAKE_TIMEOUT}s"
+                )
 
-                        newline = buf.find(b"\n")
-                        if newline == -1:
-                            break         # incomplete line — need more bytes
+            read_timeout = min(_RETRY_INTERVAL, deadline - now)
+            try:
+                chunk = await asyncio.wait_for(reader.read(_READ_CHUNK), timeout=read_timeout)
+            except asyncio.TimeoutError:
+                # No data for 2 s — re-send INIT and keep waiting.
+                if asyncio.get_event_loop().time() < deadline:
+                    logger.info("Board %d: no ACK yet, retrying INIT", self._board_id)
+                    await self.write(build_init(self._board_id))
+                continue
 
-                        line = buf[:newline].decode(errors="replace")
-                        del buf[:newline + 1]
+            if not chunk:
+                raise ConnectionError(f"Board {self._board_id}: EOF during handshake")
+            buf.extend(chunk)
 
-                        msg = parse_control(line)
-                        if (
-                            msg
-                            and msg.get("type") == "ack"
-                            and msg.get("id") == self._board_id
-                        ):
-                            logger.info("Board %d: ACK received", self._board_id)
-                            ack_received = True
-                            break
-        except TimeoutError:
-            raise TimeoutError(
-                f"Board {self._board_id}: no ACK within {_HANDSHAKE_TIMEOUT}s"
-            )
+            while buf:
+                if buf[0] != ord("{"):
+                    del buf[:1]   # discard binary frame byte
+                    continue
+
+                newline = buf.find(b"\n")
+                if newline == -1:
+                    break         # incomplete line — need more bytes
+
+                line = buf[:newline].decode(errors="replace")
+                del buf[:newline + 1]
+
+                msg = parse_control(line)
+                if (
+                    msg
+                    and msg.get("type") == "ack"
+                    and msg.get("id") == self._board_id
+                ):
+                    logger.info("Board %d: ACK received", self._board_id)
+                    ack_received = True
+                    break
 
         # Send START — board exits its wait loop and begins its task.
         await self.write(build_start())

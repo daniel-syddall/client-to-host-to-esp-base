@@ -232,6 +232,15 @@ static void handle_command(const char *line) {
         while (true) {
             if (read_json_line(buf, sizeof(buf)) < 0) continue;
             if (strstr(buf, "\"start\"") != NULL) break;
+            /* Pi timed out waiting for ACK and re-sent INIT.
+             * Re-ACK so the Pi can proceed to START.          */
+            if (strstr(buf, "\"init\"") != NULL) {
+                char *p2 = strstr(buf, "\"id\"");
+                if (p2) { p2 = strchr(p2, ':'); if (p2) g_board_id = (int)strtol(p2 + 1, NULL, 10); }
+                snprintf(ack, sizeof(ack), "{\"type\":\"ack\",\"id\":%d}", g_board_id);
+                send_json(ack);
+                ESP_LOGI(TAG, "Re-handshake: re-ACK sent (second INIT received)");
+            }
         }
 
         g_running = true;

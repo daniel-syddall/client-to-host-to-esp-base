@@ -104,9 +104,9 @@ async def get_esp_console(
         (most recent last).
     """
     if pid:
-        entries = _console.get(pid, [])
+        entries = list(_console.get(pid, []))
         return {pid: entries[-limit:]}
-    return {p: events[-limit:] for p, events in _console.items()}
+    return {p: list(events)[-limit:] for p, events in _console.items()}
 
 
 # ======================== ESP Flash ======================== #
