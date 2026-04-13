@@ -195,36 +195,15 @@ class ESPSerial:
 
         Raises TimeoutError if ACK is not received within the timeout.
         """
-        # Explicitly toggle DTR to force a clean board reset via the CH340 EN line.
+        # Opening the serial port asserts DTR which resets the ESP32 via the
+        # CH340's EN line.  Wait for the full boot cycle to complete before
+        # sending INIT, otherwise the message is consumed by the ROM
+        # bootloader and the board never sees it.
         #
-        # serial_asyncio opens the port with dtr=None (no state change), so on
-        # the second and subsequent connects the board is still alive in its run
-        # loop — it never sees a reset and never enters run_handshake() again.
-        #
-        # Driving DTR False then True creates a HIGH→LOW transition on the CH340
-        # DTR output pin.  The 100 µF capacitor on the EN line converts this to a
-        # brief negative pulse that resets the ESP32.  The 100 ms LOW hold is more
-        # than enough; the capacitor RC time constant is only ~10 ms.
-        try:
-            s = self._writer.transport._serial  # type: ignore[attr-defined]
-            s.dtr = False
-            await asyncio.sleep(0.1)
-            s.dtr = True
-            logger.info("Board %d: DTR toggled — board reset triggered", self._board_id)
-        except Exception as exc:
-            logger.warning(
-                "Board %d: DTR toggle failed (%s) — relying on hardware reset state",
-                self._board_id, exc,
-            )
-
-        # Wait for the full ESP32-S3 boot cycle before sending INIT.
-        # On fresh power-on the board is already running by the time the Pi
-        # starts, so the delay is just a safety margin.  When DTR is toggled
-        # above the board actually resets, and the full ROM→bootloader→firmware
-        # boot needs time.  6.5 s gives comfortable margin for that cold-reset
-        # path while still fitting well within the 10 s ACK timeout.
-        # If INIT is sent but ACK never arrives, increase this value first.
-        await asyncio.sleep(6.5)
+        # 3.5 s was measured on ESP32-S3-WROOM-1U with a CH340 bridge at
+        # 921600 baud.  If INIT is sent but ACK never arrives, increase this
+        # value first — the ROM bootloader takes longer on debug/slow builds.
+        await asyncio.sleep(3.5)
 
         # Send INIT with our assigned board ID.
         await self.write(build_init(self._board_id))

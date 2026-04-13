@@ -105,7 +105,7 @@ if [ "${SKIP_ESP:-0}" != "1" ]; then
             docker pull "$IDF_IMAGE"
         fi
 
-        echo "[build] Compiling ESP firmware (target=esp32)..."
+        echo "[build] Compiling ESP firmware (target=esp32s3)..."
         docker run --rm \
             -v "$ESP_DIR":/project \
             -w /project \
