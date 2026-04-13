@@ -109,12 +109,13 @@ class ESPManager:
         #   await self._correlate(board_id, payload)
 
         # Baseplate test firmware sends a 4-byte big-endian sequence counter at
-        # 10 Hz.  Log it at DEBUG so you can verify the full pipeline is working
-        # without flooding INFO-level output.  Run with LOG_LEVEL=DEBUG or set
-        # logging.getLogger("app.client.esp_manager").setLevel(logging.DEBUG).
+        # 10 Hz.  Log every frame at DEBUG and every 100th frame (~10 s) at INFO
+        # so the pipeline can be verified without flooding the output.
         if len(payload) >= 4:
             seq = int.from_bytes(payload[:4], "big")
-            logger.debug("Board %d seq=%d (%d bytes)", board_id, seq, len(payload))
+            logger.debug("Board %d seq=%d", board_id, seq)
+            if seq % 100 == 0:
+                logger.info("Board %d data flowing: seq=%d", board_id, seq)
         else:
             logger.debug("Board %d data frame: %d bytes", board_id, len(payload))
 

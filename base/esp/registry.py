@@ -106,6 +106,8 @@ class ESPRegistry:
         if old == state:
             return
         board.state = state
+        if state == BoardState.RUNNING:
+            board.last_seen = time.time()  # reset stale timer the moment board becomes RUNNING
         logger.info("ESP board %d: %s -> %s", board_id, old.value, state.value)
         self._fire_change(board_id, old, state)
 
