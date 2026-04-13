@@ -197,9 +197,12 @@ class ESPSerial:
         await self._run_handshake(reader)
 
         # Handshake complete — board is now running.
+        # Await callbacks synchronously so any state reset (e.g. sequence
+        # counter) is guaranteed to complete before the first data frame
+        # arrives from _read_frames.
         logger.info("Board %d: handshake complete — RUNNING", self._board_id)
         for cb in self._on_running:
-            asyncio.create_task(cb(self._board_id))
+            await cb(self._board_id)
 
         # Enter the continuous frame read loop.
         await self._read_frames(reader)

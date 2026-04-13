@@ -210,6 +210,27 @@ class ESPManager:
                 "ts":       time.time(),
             })
 
+    # ======================== Reconnect ======================== #
+
+    def reset_board(self, board_id: int) -> None:
+        """Reset per-board sequence tracking after a reconnect.
+
+        Called synchronously before the first data frame arrives so the gap
+        caused by frames the firmware sent while the serial port was closed
+        is not reported as dropped frames.
+        Only acts if the board has existing stats — i.e. this is a reconnect,
+        not an initial connect.
+        """
+        if board_id not in self._board_stats:
+            return
+        self._board_stats[board_id].update({
+            "last_seq":      None,
+            "frames":        0,
+            "drops":         0,
+            "session_start": time.monotonic(),
+        })
+        logger.info("Board %d: stats reset after reconnect", board_id)
+
     # ======================== Helpers ======================== #
 
     async def _forward_data(self, data: dict[str, Any]) -> None:

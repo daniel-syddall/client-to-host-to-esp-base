@@ -24,6 +24,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/uart.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
@@ -48,6 +49,11 @@
 
 #define JSON_BUF_SIZE   256
 #define DATA_BUF_SIZE   1024
+
+/* LED1 — green status LED, GPIO38, active-high.
+ * Blinks at 1 Hz while data_task is running; off during handshake/re-handshake. */
+#define LED_GPIO        38
+#define LED_BLINK_EVERY 5               /* frames between toggles (5 × 100 ms = 500 ms) */
 
 static const char *TAG = "esp_fw";
 
@@ -336,6 +342,7 @@ static void data_task(void *arg) {
     while (true) {
         /* Block until the handshake completes and the Pi sends START. */
         if (!g_running) {
+            gpio_set_level(LED_GPIO, 0);    /* LED off while paused */
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
@@ -349,8 +356,20 @@ static void data_task(void *arg) {
         send_data_frame(buf, 4);
         /* ── PROJECT-SPECIFIC: replace the four lines above ───── */
 
+        /* Blink LED1 at 1 Hz while running (toggle every LED_BLINK_EVERY frames). */
+        gpio_set_level(LED_GPIO, (seq / LED_BLINK_EVERY) % 2);
+
         vTaskDelay(pdMS_TO_TICKS(100));
     }
+}
+
+/* ── LED init ─────────────────────────────────────────────────────────────── */
+
+static void led_init(void) {
+    gpio_reset_pin(LED_GPIO);
+    gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_level(LED_GPIO, 0);
+    ESP_LOGI(TAG, "LED1 initialised on GPIO%d", LED_GPIO);
 }
 
 /* ── UART init ────────────────────────────────────────────────────────────── */
@@ -376,6 +395,7 @@ static void uart_init(void) {
 
 void app_main(void) {
     ESP_LOGI(TAG, "Firmware starting...");
+    led_init();
     uart_init();
 
     /* Block here until the Pi completes the handshake. */

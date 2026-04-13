@@ -131,6 +131,16 @@ class ClientRuntime:
         """
         board.on_control(self._esp_manager.on_control)
         board.on_data(self._esp_manager.on_data)
+
+        # Reset sequence stats on every (re)connect so frames sent by the
+        # firmware while the serial port was closed are not counted as drops.
+        # on_running callbacks are awaited before _read_frames starts, so
+        # the reset is guaranteed to complete before the first frame arrives.
+        async def _on_running(board_id: int) -> None:
+            self._esp_manager.reset_board(board_id)
+
+        board.on_running(_on_running)
+
         self._esp_boards.append(board)
 
         task = asyncio.create_task(
