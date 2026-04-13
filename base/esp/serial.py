@@ -190,8 +190,10 @@ class ESPSerial:
     async def _run_handshake(self, reader: asyncio.StreamReader) -> None:
         """Send INIT, wait for ACK, then send START.
 
-        Reads directly from the StreamReader (line-by-line) since the board
-        only sends JSON control lines during the handshake phase.
+        Uses a mixed-stream scanner (same approach as _read_frames) so that
+        binary data frames from a still-running data_task don't bury the ACK
+        JSON line.  Non-'{' bytes are silently discarded; only complete JSON
+        lines are parsed.
 
         Raises TimeoutError if ACK is not received within the timeout.
         """
@@ -210,20 +212,44 @@ class ESPSerial:
         logger.info("Board %d: INIT sent (id=%d)", self._board_id, self._board_id)
 
         # Wait for ACK — the board echoes our ID back to confirm.
+        #
+        # The board may be mid-run (data_task sending binary frames) when INIT
+        # arrives.  Those frames accumulate in the read buffer and would cause
+        # readline() to return a blob of binary garbage concatenated with the
+        # ACK JSON, making json.loads() fail.  Instead, scan the incoming bytes
+        # directly: discard anything that isn't '{', then capture the complete
+        # JSON line and check it for the expected ACK.
         try:
             async with asyncio.timeout(_HANDSHAKE_TIMEOUT):
-                while True:
-                    raw = await reader.readline()
-                    if not raw:
+                buf = bytearray()
+                ack_received = False
+                while not ack_received:
+                    chunk = await reader.read(_READ_CHUNK)
+                    if not chunk:
                         raise ConnectionError(f"Board {self._board_id}: EOF during handshake")
-                    msg = parse_control(raw.decode(errors="replace"))
-                    if (
-                        msg
-                        and msg.get("type") == "ack"
-                        and msg.get("id") == self._board_id
-                    ):
-                        logger.info("Board %d: ACK received", self._board_id)
-                        break
+                    buf.extend(chunk)
+
+                    while buf:
+                        if buf[0] != ord("{"):
+                            del buf[:1]   # discard binary frame byte
+                            continue
+
+                        newline = buf.find(b"\n")
+                        if newline == -1:
+                            break         # incomplete line — need more bytes
+
+                        line = buf[:newline].decode(errors="replace")
+                        del buf[:newline + 1]
+
+                        msg = parse_control(line)
+                        if (
+                            msg
+                            and msg.get("type") == "ack"
+                            and msg.get("id") == self._board_id
+                        ):
+                            logger.info("Board %d: ACK received", self._board_id)
+                            ack_received = True
+                            break
         except TimeoutError:
             raise TimeoutError(
                 f"Board {self._board_id}: no ACK within {_HANDSHAKE_TIMEOUT}s"
