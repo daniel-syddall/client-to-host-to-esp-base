@@ -6,5 +6,5 @@ docker compose down 2>/dev/null || true
 # any project name (e.g. if the project was started from a different directory).
 docker ps -q --filter "name=client" | xargs -r docker stop 2>/dev/null || true
 docker ps -aq --filter "name=client" | xargs -r docker rm 2>/dev/null || true
-docker compose build --build-arg CACHEBUST="$(date +%s)" client
+docker compose build --pull=false --build-arg CACHEBUST="$(date +%s)" client
 docker compose up --no-deps client "$@"

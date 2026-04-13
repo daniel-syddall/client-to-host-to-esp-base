@@ -199,6 +199,10 @@ class ESPSerial:
         # CH340's EN line.  Wait for the full boot cycle to complete before
         # sending INIT, otherwise the message is consumed by the ROM
         # bootloader and the board never sees it.
+        #
+        # 3.5 s was measured on ESP32-S3-WROOM-1U with a CH340 bridge at
+        # 921600 baud.  If INIT is sent but ACK never arrives, increase this
+        # value first — the ROM bootloader takes longer on debug/slow builds.
         await asyncio.sleep(3.5)
 
         # Send INIT with our assigned board ID.
@@ -272,7 +276,7 @@ class ESPSerial:
                     del buf[:total]
 
                     for handler in self._data_handlers:
-                        asyncio.create_task(handler(self._board_id, payload))
+                        await handler(self._board_id, payload)
 
                 # ── JSON control line ─────────────────────────────────────── #
                 elif buf[0] == ord("{"):
@@ -286,7 +290,7 @@ class ESPSerial:
                     msg = parse_control(line)
                     if msg:
                         for handler in self._control_handlers:
-                            asyncio.create_task(handler(self._board_id, msg))
+                            await handler(self._board_id, msg)
                     else:
                         logger.debug("Board %d: malformed control line: %s", self._board_id, line)
 

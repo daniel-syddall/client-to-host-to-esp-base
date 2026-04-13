@@ -108,9 +108,17 @@ class ESPManager:
         # Example — Correlation across boards:
         #   await self._correlate(board_id, payload)
 
-        logger.debug("Board %d data frame: %d bytes", board_id, len(payload))
+        # Baseplate test firmware sends a 4-byte big-endian sequence counter at
+        # 10 Hz.  Log it at DEBUG so you can verify the full pipeline is working
+        # without flooding INFO-level output.  Run with LOG_LEVEL=DEBUG or set
+        # logging.getLogger("app.client.esp_manager").setLevel(logging.DEBUG).
+        if len(payload) >= 4:
+            seq = int.from_bytes(payload[:4], "big")
+            logger.debug("Board %d seq=%d (%d bytes)", board_id, seq, len(payload))
+        else:
+            logger.debug("Board %d data frame: %d bytes", board_id, len(payload))
 
-        # PROJECT-SPECIFIC: Replace the line above with real handling.
+        # PROJECT-SPECIFIC: Replace the block above with real handling.
 
     # ======================== Helpers ======================== #
 

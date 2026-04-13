@@ -53,8 +53,8 @@ static const char *TAG = "esp_fw";
 
 /* ── Board identity (filled in by handshake) ─────────────────────────────── */
 
-static int  g_board_id = -1;
-static bool g_running  = false;
+static int           g_board_id = -1;
+static volatile bool g_running  = false;  /* written by app_main/Core 0, read by data_task/Core 1 */
 
 /* ── Nanosecond timer ─────────────────────────────────────────────────────── */
 
@@ -202,7 +202,42 @@ static uint32_t g_cpu_freq_hz = 240000000;  /* 240 MHz default for ESP32     */
 static void handle_command(const char *line) {
     ESP_LOGD(TAG, "CMD: %s", line);
 
-    if (strstr(line, "\"status\"") != NULL) {
+    if (strstr(line, "\"init\"") != NULL) {
+        /* Pi reconnected without a hardware reset — re-run the handshake in-place.
+         *
+         * This happens when the client process restarts but the board was not
+         * power-cycled.  The board is still in the control_task/data_task loop,
+         * so run_handshake() is never called again by app_main().  We handle it
+         * here instead:
+         *   1. Pause data_task by clearing g_running.
+         *   2. Reply ACK so the Pi knows we received the INIT.
+         *   3. Wait for START from within this same task context (control_task is
+         *      the sole UART reader, so calling read_json_line here is safe).
+         *   4. Resume data_task by setting g_running.                            */
+        g_running = false;          /* data_task sees this within one 100ms tick  */
+
+        char *p = strstr(line, "\"id\"");
+        if (p) {
+            p = strchr(p, ':');
+            if (p) g_board_id = (int)strtol(p + 1, NULL, 10);
+        }
+
+        ESP_LOGI(TAG, "Re-handshake: INIT received (id=%d)", g_board_id);
+        char ack[JSON_BUF_SIZE];
+        snprintf(ack, sizeof(ack), "{\"type\":\"ack\",\"id\":%d}", g_board_id);
+        send_json(ack);
+        ESP_LOGI(TAG, "Re-handshake: ACK sent");
+
+        char buf[JSON_BUF_SIZE];
+        while (true) {
+            if (read_json_line(buf, sizeof(buf)) < 0) continue;
+            if (strstr(buf, "\"start\"") != NULL) break;
+        }
+
+        g_running = true;
+        ESP_LOGI(TAG, "Re-handshake: START received — resuming");
+
+    } else if (strstr(line, "\"status\"") != NULL) {
         /* Pi is polling for a status report. */
         char resp[JSON_BUF_SIZE];
         snprintf(resp, sizeof(resp),
