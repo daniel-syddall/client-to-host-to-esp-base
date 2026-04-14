@@ -42,6 +42,15 @@ def build_start() -> bytes:
     return (json.dumps({"type": "start"}) + "\n").encode()
 
 
+def build_stop() -> bytes:
+    """Build the STOP frame — board turns off its LED and pauses its task.
+
+    Send this before closing the serial connection so the firmware reacts
+    immediately rather than waiting for the watchdog timeout.
+    """
+    return (json.dumps({"type": "stop"}) + "\n").encode()
+
+
 def build_command(cmd: str, **kwargs: Any) -> bytes:
     """Build a generic JSON command frame.
 

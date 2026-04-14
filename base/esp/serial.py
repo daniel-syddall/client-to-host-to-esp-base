@@ -26,7 +26,7 @@ import serial_asyncio
 
 from base.esp.protocol import (
     MAGIC_1, MAGIC_2, HEADER_SIZE,
-    build_init, build_start,
+    build_init, build_start, build_stop,
     parse_control, parse_binary_length,
 )
 
@@ -124,15 +124,21 @@ class ESPSerial:
     async def restart(self) -> None:
         """Force a disconnect → reconnect → re-handshake cycle for this board.
 
-        Closes the serial writer, which causes the active _read_frames loop
-        to see EOF and return. The outer read_loop then fires disconnect
-        callbacks, sleeps for reconnect_interval, re-opens the port, and
-        re-runs _run_handshake — sending a fresh INIT to the firmware.
+        Sends a STOP frame to the firmware so it turns its LED off immediately,
+        then closes the serial writer. The active _read_frames loop sees EOF
+        and returns. The outer read_loop fires disconnect callbacks, sleeps for
+        reconnect_interval, re-opens the port, and re-runs _run_handshake —
+        sending a fresh INIT to the firmware.
 
         The firmware handles the re-INIT in handle_command(): it pauses
-        data_task, ACKs, waits for START, then resumes.
+        data_task, ACKs, waits for START, then resumes and re-enables the LED.
         """
         if self._writer:
+            try:
+                self._writer.write(build_stop())
+                await self._writer.drain()
+            except Exception:
+                pass
             try:
                 self._writer.close()
             except Exception:

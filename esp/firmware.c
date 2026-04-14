@@ -59,7 +59,7 @@
 #define LED_GPIO              38
 #define LED_ON                0               /* active-low: sink cathode to GND  */
 #define LED_OFF               1
-#define DISCONNECT_TIMEOUT_MS 15000           /* watchdog: LED off after 15 s with no Pi command */
+#define DISCONNECT_TIMEOUT_MS 5000            /* watchdog: LED off after 5 s with no Pi command  */
 
 static const char *TAG = "esp_fw";
 
@@ -72,7 +72,7 @@ static volatile bool g_running  = false;  /* written by app_main/Core 0, read by
 
 typedef enum { LED_STATE_OFF, LED_STATE_BLINK } led_state_t;
 
-static volatile led_state_t g_led_state     = LED_STATE_BLINK; /* blink from boot (connecting) */
+static volatile led_state_t g_led_state     = LED_STATE_OFF;   /* off until handshake completes */
 static volatile TickType_t  g_last_cmd_tick = 0;               /* updated on every Pi command  */
 
 /* ── Nanosecond timer ─────────────────────────────────────────────────────── */
@@ -203,6 +203,7 @@ static void run_handshake(void) {
 
     ESP_LOGI(TAG, "START received — entering run loop");
     g_last_cmd_tick = xTaskGetTickCount();  /* seed watchdog so data_task doesn't immediately time out */
+    g_led_state = LED_STATE_BLINK;          /* start blinking only once fully connected              */
     g_running = true;
 }
 
@@ -239,7 +240,7 @@ static void handle_command(const char *line) {
          *      the sole UART reader, so calling read_json_line here is safe).
          *   5. Resume data_task by setting g_running.                            */
         g_running   = false;            /* data_task sees this within one 100ms tick  */
-        g_led_state = LED_STATE_BLINK;  /* blink while reconnecting                  */
+        g_led_state = LED_STATE_OFF;    /* LED off during re-handshake gap            */
 
         char *p = strstr(line, "\"id\"");
         if (p) {
@@ -269,6 +270,7 @@ static void handle_command(const char *line) {
         }
 
         g_last_cmd_tick = xTaskGetTickCount();  /* seed watchdog for fresh session */
+        g_led_state = LED_STATE_BLINK;          /* start blinking once re-connected */
         g_running = true;
         ESP_LOGI(TAG, "Re-handshake: START received — resuming");
 
@@ -292,6 +294,14 @@ static void handle_command(const char *line) {
                 ESP_LOGI(TAG, "Clock sync: ts_ns=%llu", (unsigned long long)g_sync_ts_ns);
             }
         }
+
+    } else if (strstr(line, "\"stop\"") != NULL) {
+        /* Pi is signalling that the session is ending (reboot, script stop, etc.).
+         * Turn the LED off immediately and pause data_task.  When the Pi
+         * reconnects it will run a fresh handshake which re-enables the LED. */
+        g_running   = false;
+        g_led_state = LED_STATE_OFF;
+        ESP_LOGI(TAG, "Stop received — LED off, data paused");
 
     }
 
