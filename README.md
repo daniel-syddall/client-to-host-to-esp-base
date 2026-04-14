@@ -899,6 +899,136 @@ async function refresh() {
 
 ---
 
+## ESP Firmware & Board Management
+
+This project extends the baseplate with direct USB-serial management of ESP32-S3 boards. Each client Pi can connect to multiple boards simultaneously, run the INIT→ACK→START handshake, and stream binary data frames to the host in real time.
+
+### Project Structure (ESP additions)
+
+```
+esp/
+├── esp/
+│   ├── firmware.c              # Canonical ESP firmware source — ALWAYS edit this, never main/main.c
+│   ├── main/
+│   │   ├── CMakeLists.txt      # IDF component deps — persists between builds
+│   │   └── main.c              # Auto-generated copy of firmware.c (overwritten by build.sh)
+│   ├── build.sh                # Docker-based build script (espressif/idf:latest)
+│   ├── firmware.bin            # Compiled firmware output
+│   ├── bootloader.bin          # Compiled bootloader
+│   └── partition-table.bin     # Compiled partition table
+│
+└── base/esp/                   # ESP baseplate layer (treat as read-only)
+    ├── protocol.py             # Frame builders: build_init, build_start, build_stop, build_command
+    ├── serial.py               # ESPSerial — manages one board's serial lifecycle
+    ├── handshake.py            # Board discovery and session initialisation
+    ├── registry.py             # ESPRegistry — tracks live board states
+    ├── flash.py                # Firmware flashing via esptool.py
+    └── udev.py                 # udev rule generation for stable /dev/esp_port_N symlinks
+```
+
+### Building the Firmware
+
+```bash
+cd esp/esp
+./build.sh
+```
+
+`build.sh` does the following:
+1. Finds the single `*.c` file in `esp/esp/` and copies it to `main/main.c`.
+2. Runs `docker run espressif/idf:latest idf.py set-target esp32s3 && idf.py build` inside a container.
+3. Copies `firmware.bin`, `bootloader.bin`, and `partition-table.bin` back to `esp/esp/`.
+
+> **Important:** `main/main.c` is overwritten on every build. Always edit `firmware.c` — that is the canonical source.
+
+`main/CMakeLists.txt` is **not** overwritten and persists between builds. The current required components for ESP-IDF 6.1:
+
+```cmake
+idf_component_register(SRCS "main.c"
+                        INCLUDE_DIRS "."
+                        REQUIRES esp_driver_uart esp_driver_gpio)
+```
+
+### Serial Protocol
+
+The Pi↔ESP protocol is a mixed binary/JSON stream over UART1 at 921600 baud.
+
+**Handshake sequence (every (re)connect):**
+
+```
+Pi → ESP:  {"type":"init","id":<board_id>}\n
+ESP → Pi:  {"type":"ack","id":<board_id>}\n
+Pi → ESP:  {"type":"start"}\n
+ESP:        enters data loop
+```
+
+**Binary data frames (ESP → Pi):**
+
+```
+[0xAA][0x55][length: uint16 LE][payload bytes...]
+```
+
+**Control commands (Pi → ESP, while running):**
+
+| Type | Purpose |
+|------|---------|
+| `{"type":"stop"}` | Signal session end — LED off immediately, data paused |
+| `{"type":"status"}` | Request a status reply |
+| `{"type":"clock_sync","ts":<ns>}` | Sync nanosecond clock |
+
+**Re-handshake (without hardware reset):** If the Pi reconnects without rebooting the ESP, it sends a new `init`. The firmware's `handle_command()` pauses `data_task`, ACKs, waits for `start`, then resumes. The LED turns off during the gap and re-enables after `start`.
+
+### LED State Machine
+
+The green LED (GPIO38, active-low) is driven by an independent `led_task` (Core 0, 500 ms tick):
+
+| State | LED | When |
+|-------|-----|------|
+| `LED_STATE_OFF` | Solid off | Boot, waiting for handshake, re-handshake gap, stop received, watchdog expired |
+| `LED_STATE_BLINK` | 1 Hz blink | After `start` received — connected and running |
+
+**Watchdog:** If no command arrives from the Pi for 5 seconds while running, `data_task` sets `LED_STATE_OFF`. Any incoming command refreshes the watchdog and re-enables blinking.
+
+**Stop signal:** Before closing the serial port (e.g. on reboot from UI), the Pi sends `{"type":"stop"}`. The firmware responds immediately — LED off, `data_task` paused — rather than waiting for the 5-second watchdog.
+
+### Hardware: Olimex ESP32-S3-DevKit-Lipo
+
+| Feature | Detail |
+|---------|--------|
+| Board | ESP32-S3-DevKit-Lipo Rev B |
+| UART | UART1, GPIO43 (TX) / GPIO44 (RX), 921600 baud |
+| Status LED (LED1) | Green, GPIO38, **active-low** (circuit: 3.3V → R13 → Anode → LED → Cathode → GPIO38) |
+| Charging LED | Yellow, driven by BL4054B charger — always on when powered, not software-controlled |
+
+### ESP API Endpoints
+
+All endpoints are prefixed `/api/project`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/esp/status` | Live board stats — frames, drops, session uptime |
+| `GET` | `/esp/console?pid=<id>&limit=<n>` | Recent ESP data events for a client |
+| `POST` | `/esp/reboot` | Force reconnect/re-handshake — body: `{"pid":"<id>","board_ids":[]}` |
+| `POST` | `/esp/flash` | Trigger firmware flash on boards — body: `{"pid":"<id>","board_ids":[]}` |
+| `POST` | `/esp/command` | Relay a raw JSON command to boards — body: `{"pid":"<id>","board_ids":[],"command":{}}` |
+
+### app/client/esp_manager.py
+
+`ESPManager` tracks per-board statistics and dispatches data frames to the host:
+
+- `on_data(board_id, payload)` — called for every binary frame; tracks sequence numbers and detects drops.
+- `reset_board(board_id)` — resets stats on reconnect (called from `on_running` callback to avoid false-positive drop counts).
+- `get_stats()` — returns `{board_id: {frames, drops, session_start, last_seq}}`.
+
+### Udev Setup (run once per Pi)
+
+```bash
+sudo python3 -m base.esp.udev
+```
+
+Creates `/dev/esp_port_N` symlinks that map each physical USB socket to a fixed device path, regardless of plug order or reboot. Required for stable multi-board connections.
+
+---
+
 ## Base Modules Reference
 
 | Module | Key Export | Purpose |
