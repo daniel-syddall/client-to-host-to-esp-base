@@ -52,11 +52,14 @@
 /* LED1 — green status LED on GPIO38.
  * Circuit: 3.3V → R13 → Anode → LED → Cathode → GPIO38  (active-low).
  * Pull GPIO38 LOW to turn the LED on; HIGH to turn it off.
- * Blinks at 1 Hz while data_task is running; off during handshake/re-handshake. */
-#define LED_GPIO        38
-#define LED_ON          0               /* active-low: sink cathode to GND  */
-#define LED_OFF         1
-#define LED_BLINK_EVERY 5               /* frames between toggles (5 × 100 ms = 500 ms) */
+ *
+ * State machine (driven by led_task):
+ *   LED_STATE_BLINK — 1 Hz blink while connecting, reconnecting, or running.
+ *   LED_STATE_OFF   — solid off when disconnected, crashed, or stopped.       */
+#define LED_GPIO              38
+#define LED_ON                0               /* active-low: sink cathode to GND  */
+#define LED_OFF               1
+#define DISCONNECT_TIMEOUT_MS 15000           /* watchdog: LED off after 15 s with no Pi command */
 
 static const char *TAG = "esp_fw";
 
@@ -64,6 +67,13 @@ static const char *TAG = "esp_fw";
 
 static int           g_board_id = -1;
 static volatile bool g_running  = false;  /* written by app_main/Core 0, read by data_task/Core 1 */
+
+/* ── LED state machine globals ────────────────────────────────────────────── */
+
+typedef enum { LED_STATE_OFF, LED_STATE_BLINK } led_state_t;
+
+static volatile led_state_t g_led_state     = LED_STATE_BLINK; /* blink from boot (connecting) */
+static volatile TickType_t  g_last_cmd_tick = 0;               /* updated on every Pi command  */
 
 /* ── Nanosecond timer ─────────────────────────────────────────────────────── */
 
@@ -192,6 +202,7 @@ static void run_handshake(void) {
     }
 
     ESP_LOGI(TAG, "START received — entering run loop");
+    g_last_cmd_tick = xTaskGetTickCount();  /* seed watchdog so data_task doesn't immediately time out */
     g_running = true;
 }
 
@@ -211,6 +222,9 @@ static uint32_t g_cpu_freq_hz = 240000000;  /* 240 MHz default for ESP32     */
 static void handle_command(const char *line) {
     ESP_LOGD(TAG, "CMD: %s", line);
 
+    /* Any message from the Pi means the connection is alive — refresh watchdog. */
+    g_last_cmd_tick = xTaskGetTickCount();
+
     if (strstr(line, "\"init\"") != NULL) {
         /* Pi reconnected without a hardware reset — re-run the handshake in-place.
          *
@@ -219,11 +233,13 @@ static void handle_command(const char *line) {
          * so run_handshake() is never called again by app_main().  We handle it
          * here instead:
          *   1. Pause data_task by clearing g_running.
-         *   2. Reply ACK so the Pi knows we received the INIT.
-         *   3. Wait for START from within this same task context (control_task is
+         *   2. Set LED to blink (reconnecting state).
+         *   3. Reply ACK so the Pi knows we received the INIT.
+         *   4. Wait for START from within this same task context (control_task is
          *      the sole UART reader, so calling read_json_line here is safe).
-         *   4. Resume data_task by setting g_running.                            */
-        g_running = false;          /* data_task sees this within one 100ms tick  */
+         *   5. Resume data_task by setting g_running.                            */
+        g_running   = false;            /* data_task sees this within one 100ms tick  */
+        g_led_state = LED_STATE_BLINK;  /* blink while reconnecting                  */
 
         char *p = strstr(line, "\"id\"");
         if (p) {
@@ -252,6 +268,7 @@ static void handle_command(const char *line) {
             }
         }
 
+        g_last_cmd_tick = xTaskGetTickCount();  /* seed watchdog for fresh session */
         g_running = true;
         ESP_LOGI(TAG, "Re-handshake: START received — resuming");
 
@@ -345,9 +362,18 @@ static void data_task(void *arg) {
     while (true) {
         /* Block until the handshake completes and the Pi sends START. */
         if (!g_running) {
-            gpio_set_level(LED_GPIO, LED_OFF);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
+        }
+
+        /* Watchdog: if no Pi command has arrived for DISCONNECT_TIMEOUT_MS the
+         * connection is considered lost — turn the LED off.  Commands arriving
+         * via handle_command() refresh g_last_cmd_tick, which re-enables the LED. */
+        TickType_t now = xTaskGetTickCount();
+        if ((now - g_last_cmd_tick) > pdMS_TO_TICKS(DISCONNECT_TIMEOUT_MS)) {
+            g_led_state = LED_STATE_OFF;
+        } else {
+            g_led_state = LED_STATE_BLINK;
         }
 
         /* ── Baseplate test: 4-byte big-endian sequence counter ── */
@@ -359,20 +385,40 @@ static void data_task(void *arg) {
         send_data_frame(buf, 4);
         /* ── PROJECT-SPECIFIC: replace the four lines above ───── */
 
-        /* Blink LED1 at 1 Hz while running (toggle every LED_BLINK_EVERY frames). */
-        gpio_set_level(LED_GPIO, ((seq / LED_BLINK_EVERY) % 2) ? LED_OFF : LED_ON);
-
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
-/* ── LED init ─────────────────────────────────────────────────────────────── */
+/* ── LED init & task ──────────────────────────────────────────────────────── */
 
 static void led_init(void) {
     gpio_reset_pin(LED_GPIO);
     gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_level(LED_GPIO, LED_OFF);
     ESP_LOGI(TAG, "LED1 initialised on GPIO%d (active-low)", LED_GPIO);
+}
+
+/**
+ * led_task - Drives LED1 according to g_led_state.
+ *
+ * LED_STATE_BLINK: toggles every 500 ms (1 Hz blink).
+ * LED_STATE_OFF:   holds LED off.
+ *
+ * Runs on Core 0 at lower priority than control/data tasks so it never
+ * starves protocol handling.
+ */
+static void led_task(void *arg) {
+    bool led_on = false;
+    while (true) {
+        if (g_led_state == LED_STATE_BLINK) {
+            led_on = !led_on;
+            gpio_set_level(LED_GPIO, led_on ? LED_ON : LED_OFF);
+        } else {
+            led_on = false;
+            gpio_set_level(LED_GPIO, LED_OFF);
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }
 
 /* ── UART init ────────────────────────────────────────────────────────────── */
@@ -401,6 +447,10 @@ void app_main(void) {
     led_init();
     uart_init();
 
+    /* LED task must start before run_handshake() so it blinks during the
+     * initial connection wait (Core 0, priority 3 — below control/data). */
+    xTaskCreatePinnedToCore(led_task,     "led",  1024, NULL, 3, NULL, 0);
+
     /* Block here until the Pi completes the handshake. */
     run_handshake();
 
@@ -408,7 +458,7 @@ void app_main(void) {
     xTaskCreatePinnedToCore(control_task, "ctrl", 4096, NULL, 5, NULL, 0);
 
     /* Start the data producer on Core 1. */
-    xTaskCreatePinnedToCore(data_task, "data", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(data_task,    "data", 4096, NULL, 5, NULL, 1);
 
     /* app_main returns — the scheduler keeps the tasks alive. */
 }
